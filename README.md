@@ -1,14 +1,14 @@
 # AUBEVENTS
 
-Monorepo for the web app.
+repo for the web app.
 
 ## Folders
-- \rontend/\ — Web UI (Next.js/React)
-- \ackend/\ — API (Django + DRF)
-- \infra/\ — Dev/ops (env templates, scripts)
-- \docs/\ — Diagrams, API contracts, notes
+- \Frontend/\ â€” Web UI (Next.js/React)
+- \Backend/\ â€” API (Django + DRF)
+- \infra/\ â€” Dev/ops (env templates, scripts)
+- \docs/\ â€” Diagrams, API contracts, notes
 
 ## Getting Started
-- See \ackend/README.md\ to set up Django.
-- See \rontend/README.md\ to set up the web app.
+- See \Backend/README.md\ to set up Django.
+- See \frontend/README.md\ to set up the web app.
 - See \infra/README.md\ for local environment notes.
