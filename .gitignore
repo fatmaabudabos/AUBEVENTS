@@ -21,3 +21,6 @@ dist/
 # Django
 media/
 staticfiles/
+
+# Database secrets
+database/DB_Password.py

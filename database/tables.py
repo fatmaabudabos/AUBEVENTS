@@ -10,7 +10,7 @@ class Users(SQLModel, table=True):
 
     is_admin: bool = Field(default=False)
 
-    is_verified: bool = Field(default=False)
+    is_verified: bool = Field(default=False, nullable = False)
     verification_token: Optional[str] = Field(default=None)
     verification_token_expiry: Optional[datetime] = Field(default=None)
 

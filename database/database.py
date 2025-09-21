@@ -1,10 +1,10 @@
 # List of database functions to be used in the backend
 
 from sqlmodel import Session, select, create_engine
-from tables import Users
+from database.tables import Users
 from typing import Optional
 from datetime import datetime
-from DB_Password import DATABASE_URL
+from database.DB_Password import DATABASE_URL
 
 engine = create_engine(DATABASE_URL, echo=True)
 
@@ -14,7 +14,7 @@ def get_engine():
 # --- Create User ---   
 def create_user(email: str, password_hash: str):
     with Session(engine) as session:
-        user = Users(email=email, password_hash=password_hash)
+        user = Users(email=email, password_hash=password_hash, is_verified=False,)
         session.add(user)
         session.commit()
 
