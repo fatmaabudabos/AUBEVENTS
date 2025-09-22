@@ -1,3 +1,28 @@
+def _auth_from_request(request):
+    """Return user (or None) from Authorization: Bearer <jwt> header."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    token = auth.split(" ", 1)[1].strip()
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except Exception:
+        return None
+    email = payload.get("email")
+    if not email:
+        return None
+    return get_user(email)
+
+@api_view(["GET"])
+def me(request):
+    user = _auth_from_request(request)
+    if not user:
+        return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response({
+        "email": user.email,
+        "is_verified": user.is_verified,
+        "is_admin": getattr(user, "is_admin", False),
+    }, status=status.HTTP_200_OK)
 import re
 import bcrypt
 import secrets
