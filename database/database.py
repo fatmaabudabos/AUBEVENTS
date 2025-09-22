@@ -1,10 +1,17 @@
+# --- Delete User ---
+def delete_user(email: str):
+    with Session(engine) as session:
+        user = session.exec(select(Users).where(Users.email == email)).first()
+        if user:
+            session.delete(user)
+            session.commit()
 # List of database functions to be used in the backend
 
 from sqlmodel import Session, select, create_engine
-from database.tables import Users
+from .tables import Users
 from typing import Optional
 from datetime import datetime
-from database.DB_Password import DATABASE_URL
+from .DB_Password import DATABASE_URL
 
 engine = create_engine(DATABASE_URL, echo=True)
 

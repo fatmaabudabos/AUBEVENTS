@@ -1,27 +1,24 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from database.database import create_user, get_user, update_is_verified, update_reset_code, delete_user
+from database.database import create_user, get_user, update_is_verified, update_reset_code
 import bcrypt
 from datetime import datetime, timedelta
-from sqlmodel import SQLModel
-from database.database import get_engine
 
 class PasswordResetTests(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        SQLModel.metadata.create_all(get_engine())
-
     def setUp(self):
         self.client = APIClient()
         self.email = "test@aub.edu.lb"
         self.password = "TestPass123!"
+        pw_hash = bcrypt.hashpw(self.password.encode(), bcrypt.gensalt()).decode()
+        from database.database import delete_user
         from django.core.cache import cache
-        delete_user(self.email)  # Remove any existing user before each test
+        try:
+            delete_user(self.email)
+        except Exception:
+            pass
         # Clear rate limit cache for this email
         cache.delete(f"reset-rl-{self.email}")
-        pw_hash = bcrypt.hashpw(self.password.encode(), bcrypt.gensalt()).decode()
         create_user(self.email, pw_hash)
         update_is_verified(self.email, True)
 

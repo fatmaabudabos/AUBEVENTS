@@ -3,18 +3,49 @@ import bcrypt
 import secrets
 import random
 import jwt
-import bcrypt
 from django.conf import settings
 from datetime import datetime, timedelta
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from django.core.mail import send_mail
+from django.core.cache import cache
+import logging
 from database.database import (
     create_user, get_user, update_verification_token,
     get_verification_token, get_verification_token_expiry,
-     update_is_verified,  get_password, get_is_verified,
+    update_is_verified,  get_password, get_is_verified,
+    update_reset_code, get_reset_code, get_reset_code_expiry
 )
+logger = logging.getLogger(__name__)
+
+@api_view(["POST"])
+def password_reset_request(request):
+    # Extract email first
+    email = request.data.get("email")
+    if not email:
+        return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+    # Rate limit: max 3 requests per hour per email
+    key = f"reset-rl-{email}"
+    count = cache.get(key, 0)
+    if count >= 3:
+        return Response({"error": "Too many password reset requests. Please try again later."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    cache.set(key, count + 1, timeout=3600)  # 1 hour
+    user = get_user(email)
+    if not user:
+        return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+    # Generate a secure reset code (6-digit)
+    reset_code = str(random.randint(100000, 999999))
+    expiry = datetime.utcnow() + timedelta(minutes=15)
+    update_reset_code(email, reset_code, expiry)
+    # Send email with reset code
+    send_mail(
+        subject="AUBEvents Password Reset",
+        message=f"Your password reset code is: {reset_code}\nThis code will expire in 15 minutes.",
+        from_email=None,
+        recipient_list=[email],
+    )
+    return Response({"message": "Password reset code sent to your email."}, status=status.HTTP_200_OK)
 
 USERS_DB = {}   # temporary in-memory store for testing
 
@@ -173,3 +204,31 @@ def login(request):
         },
         status=status.HTTP_200_OK
     )
+
+@api_view(["POST"])
+def password_reset_confirm(request):
+    email = request.data.get("email")
+    reset_code = request.data.get("reset_code")
+    new_password = request.data.get("new_password")
+    if not email or not reset_code or not new_password:
+        return Response({"error": "Email, reset code, and new password are required."}, status=status.HTTP_400_BAD_REQUEST)
+    user = get_user(email)
+    if not user:
+        return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+    stored_code = get_reset_code(email)
+    expiry = get_reset_code_expiry(email)
+    if not stored_code or not expiry:
+        return Response({"error": "No reset code found. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+    if stored_code != reset_code:
+        return Response({"error": "Invalid reset code."}, status=status.HTTP_400_BAD_REQUEST)
+    if datetime.utcnow() > expiry:
+        return Response({"error": "Reset code has expired."}, status=status.HTTP_400_BAD_REQUEST)
+    ok, msg = check_password_strength(new_password)
+    if not ok:
+        return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+    pw_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    from database.database import update_password, update_reset_code
+    update_password(email, pw_hash)
+    # Clear reset code and expiry
+    update_reset_code(email, None, None)
+    return Response({"message": "Password has been reset successfully."}, status=status.HTTP_200_OK)
