@@ -8,10 +8,16 @@ env/
 node_modules/
 .next/
 dist/
+frontend/node_modules/
+frontend/dist/
 
 # Env
 .env
 *.env
+
+# SQLite dev databases
+db.sqlite3
+test.db
 
 # OS/IDE
 .DS_Store

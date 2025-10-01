@@ -1,11 +1,11 @@
 # List of database functions to be used in the backend
 
 from sqlmodel import Session, select, create_engine
-from tables import Users
-from tables import Events
+from .tables import Users
+from .tables import Events
 from typing import Optional
 from datetime import datetime
-from DB_Password import DATABASE_URL
+from .DB_Password import DATABASE_URL
 
 engine = create_engine(DATABASE_URL, echo=False)
 
