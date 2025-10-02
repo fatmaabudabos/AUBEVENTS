@@ -1,11 +1,11 @@
 # List of database functions to be used in the backend
 
 from sqlmodel import Session, select, create_engine
-from .tables import Users
-from .tables import Events
+from tables import Users
+from tables import Events
 from typing import Optional
 from datetime import datetime
-from .DB_Password import DATABASE_URL
+from DB_Password import DATABASE_URL
 
 engine = create_engine(DATABASE_URL, echo=False)
 
@@ -166,6 +166,11 @@ def get_description(event_id: int) -> Optional[str]:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
         return event.description if event else None
+    
+def get_organizer(event_id: int) -> Optional[str]:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        return event.organizer if event else None
 
 def get_date(event_id: int) -> Optional[datetime]:
     with Session(get_engine()) as session:
@@ -187,6 +192,11 @@ def get_available_seats(event_id: int) -> Optional[int]:
         event = session.get(Events, event_id)
         return event.available_seats if event else None
 
+def get_speakers(event_id: int) -> Optional[str]:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        return event.speakers if event else None
+
 # --- Setters ---
 
 def update_title(event_id: int, title: str) -> None:
@@ -198,7 +208,6 @@ def update_title(event_id: int, title: str) -> None:
         session.add(event)
         session.commit()
 
-
 def update_description(event_id: int, description: str):
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
@@ -208,6 +217,14 @@ def update_description(event_id: int, description: str):
         session.add(event)
         session.commit()
 
+def update_organizer(event_id: int, organizer: str) -> None:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        if not event:
+            return
+        event.organizer = organizer
+        session.add(event)
+        session.commit()
 
 def update_date(event_id: int, date: datetime):
     with Session(get_engine()) as session:
@@ -218,7 +235,6 @@ def update_date(event_id: int, date: datetime):
         session.add(event)
         session.commit()
 
-
 def update_location(event_id: int, location: str):
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
@@ -227,7 +243,6 @@ def update_location(event_id: int, location: str):
         event.location = location
         session.add(event)
         session.commit()
-
 
 def update_capacity(event_id: int, capacity: int):
     with Session(get_engine()) as session:
@@ -240,13 +255,21 @@ def update_capacity(event_id: int, capacity: int):
         session.add(event)
         session.commit()
 
-
 def update_available_seats(event_id: int, seats: int):
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
         if not event: 
             return
         event.available_seats = seats
+        session.add(event)
+        session.commit()
+
+def update_speakers(event_id: int, speakers: str) -> None:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        if not event:
+            return
+        event.speakers = speakers
         session.add(event)
         session.commit()
 
@@ -288,7 +311,6 @@ def get_user_events(user_email: str) -> list[int]:
         if not user:
             return []
         return [event.id for event in user.events]
-
 
 def get_event_users(event_id: int) -> list[str]:
     with Session(get_engine()) as session:
