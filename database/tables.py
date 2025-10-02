@@ -5,8 +5,8 @@ from typing import Optional, List
 from datetime import datetime
 
 class UserEventLink(SQLModel, table=True):
-    user_email: str = Field(foreign_key="users.email", primary_key=True)
     event_id: int = Field(foreign_key="events.id", primary_key=True)
+    user_email: str = Field(foreign_key="users.email", primary_key=True)
 
 class Users(SQLModel, table=True):
     email: str = Field(primary_key=True)
@@ -27,11 +27,14 @@ class Events(SQLModel, table=True):
     id: int = Field(primary_key=True)
     title: str
     description: Optional[str] = Field(default=None)
+    organizer: Optional[str] = None
 
     date: Optional[datetime] = Field(default=None)
     location: Optional[str] = Field(default=None)
 
     capacity: Optional[int] = Field(default=None)
     available_seats: Optional[int] = Field(default=None)
+
+    speakers: Optional[str] = None
 
     users: List[Users] = Relationship(back_populates="events", link_model=UserEventLink)
