@@ -31,8 +31,8 @@
             update_reset_code, delete_user,
 
         # Events
-            create_event, get_title, get_description, get_organizer, get_date, get_location, get_capacity,
-            get_available_seats, get_speakers, update_title, update_description, update_organizer,
+            create_event, get_title, get_description, get_organizers, get_date, get_location, get_capacity,
+            get_available_seats, get_speakers, update_title, update_description, update_organizers,
             update_date, update_location, update_capacity, update_available_seats, update_speakers,
             delete_event,
 
@@ -86,19 +86,20 @@
 
         update_title(event_id, title)
         update_description(event_id, description)
-        update_organizer(event_id, email)
         update_date(event_id, date)
         update_location(event_id, location)
         update_capacity(event_id, capacity)
-        update_speakers(event_id, speakers)
         update_available_seats(event_id, seats)
+        update_organizers(event_id, organizers)
+        update_speakers(event_id, speakers)
 
         delete_event(event_id)
 
         Argument types:
-        title - description - location - email - speakers: string
+        title - description - location - email: string
         date: datetime
         event_id - capacity - available_seats: int
+        organizers - speakers: list[]
 
 
     -User–Event linking:
