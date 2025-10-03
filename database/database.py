@@ -3,7 +3,7 @@
 from sqlmodel import Session, select, create_engine
 from tables import Users
 from tables import Events
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from DB_Password import DATABASE_URL
 
@@ -137,16 +137,24 @@ def create_event(
     date: Optional[datetime] = None,
     location: Optional[str] = None,
     capacity: Optional[int] = None,
-    available_seats: Optional[int] = None
+    available_seats: Optional[int] = None,
+    organizers: Optional[List[str]] = None,
+    speakers: Optional[List[str]] = None,
+
 ) -> Events:
-    
+
+    organizers = organizers or []
+    speakers = speakers or []
+
     event = Events(
         title=title,
         description=description,
         date=date,
         location=location,
         capacity=capacity,
-        available_seats=available_seats
+        available_seats=available_seats,
+        organizers=organizers,
+        speakers=speakers,
     )
 
     with Session(get_engine()) as session:
@@ -166,11 +174,6 @@ def get_description(event_id: int) -> Optional[str]:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
         return event.description if event else None
-    
-def get_organizer(event_id: int) -> Optional[str]:
-    with Session(get_engine()) as session:
-        event = session.get(Events, event_id)
-        return event.organizer if event else None
 
 def get_date(event_id: int) -> Optional[datetime]:
     with Session(get_engine()) as session:
@@ -192,10 +195,15 @@ def get_available_seats(event_id: int) -> Optional[int]:
         event = session.get(Events, event_id)
         return event.available_seats if event else None
 
-def get_speakers(event_id: int) -> Optional[str]:
+def get_organizers(event_id: int) -> List[str]:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
-        return event.speakers if event else None
+        return event.organizers or []
+    
+def get_speakers(event_id: int) -> List[str]:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        return event.speakers or []
 
 # --- Setters ---
 
@@ -214,15 +222,6 @@ def update_description(event_id: int, description: str):
         if not event: 
             return
         event.description = description
-        session.add(event)
-        session.commit()
-
-def update_organizer(event_id: int, organizer: str) -> None:
-    with Session(get_engine()) as session:
-        event = session.get(Events, event_id)
-        if not event:
-            return
-        event.organizer = organizer
         session.add(event)
         session.commit()
 
@@ -264,7 +263,16 @@ def update_available_seats(event_id: int, seats: int):
         session.add(event)
         session.commit()
 
-def update_speakers(event_id: int, speakers: str) -> None:
+def update_organizers(event_id: int, organizers: List[str]) -> None:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        if not event:
+            return
+        event.organizers = organizers
+        session.add(event)
+        session.commit()
+
+def update_speakers(event_id: int, speakers: List[str]) -> None:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
         if not event:
