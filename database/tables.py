@@ -3,6 +3,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List
 from datetime import datetime
+from sqlalchemy import Column, JSON
 
 class UserEventLink(SQLModel, table=True):
     event_id: int = Field(foreign_key="events.id", primary_key=True)
@@ -27,7 +28,6 @@ class Events(SQLModel, table=True):
     id: int = Field(primary_key=True)
     title: str
     description: Optional[str] = Field(default=None)
-    organizer: Optional[str] = None
 
     date: Optional[datetime] = Field(default=None)
     location: Optional[str] = Field(default=None)
@@ -35,6 +35,7 @@ class Events(SQLModel, table=True):
     capacity: Optional[int] = Field(default=None)
     available_seats: Optional[int] = Field(default=None)
 
-    speakers: Optional[str] = None
+    speakers: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    organizers: List[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     users: List[Users] = Relationship(back_populates="events", link_model=UserEventLink)
