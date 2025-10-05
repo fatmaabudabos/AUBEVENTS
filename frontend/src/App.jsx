@@ -1,32 +1,35 @@
-
-
-
-
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Login from "./Login";
-import Signup from "./Signup";
-import ForgotPassword from "./ForgotPassword";
-import Landing from "./Landing";
-import Dashboard from "./Dashboard";
-import Verify from "./Verify";
-import ResetPassword from "./ResetPassword";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import Landing from "./Landing.jsx";
+import Login from "./Login.jsx";
+import Signup from "./Signup.jsx";
+import ForgotPassword from "./ForgotPassword.jsx";
+import ResetPassword from "./ResetPassword.jsx";
+import Verify from "./Verify.jsx";
+import Dashboard from "./Dashboard.jsx";
+import AdminEventsPanel from "./admin/AdminEventsPanel.jsx";
 import "./App.css";
+import "./index.css";
 
-
-function App() {
+export default function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login onSwitch={() => window.location.href = '/signup'} onForgot={() => window.location.href = '/forgot'} />} />
-        <Route path="/signup" element={<Signup onSwitch={() => window.location.href = '/login'} />} />
-        <Route path="/forgot" element={<ForgotPassword onSwitchLogin={() => window.location.href = '/login'} />} />
-        <Route path="/verify" element={<Verify />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/login" element={<LoginRedirect />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot" element={<ForgotPassword />} />
+        <Route path="/reset/:token" element={<ResetPassword />} />
+        <Route path="/verify/:token" element={<Verify />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/admin" element={<AdminEventsPanel />} />
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
   );
 }
 
-export default App;
+// Temporary: all logins lead to admin panel
+function LoginRedirect() {
+  return <Navigate to="/admin" replace />;
+}
