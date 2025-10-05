@@ -2,7 +2,7 @@
 
 
 from sqlmodel import SQLModel
-from .database import get_engine
+from database.database import get_engine
 import tables
 
 #SQLModel.metadata.drop_all(get_engine())
