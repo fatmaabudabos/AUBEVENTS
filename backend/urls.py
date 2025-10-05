@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from backend import events_views
 from django.http import JsonResponse
 
 
@@ -15,4 +16,7 @@ urlpatterns = [
     path('', root_index, name='api_root'),
     path('admin/', admin.site.urls),
     path('auth/', include('accounts.urls')),
+    # Events API
+    path('api/events', events_views.events_create, name='events_create'),
+    path('api/events/<int:event_id>', events_views.events_detail, name='events_detail'),
 ]

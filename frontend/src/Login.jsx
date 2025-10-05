@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from './api';
 
 export default function Login({ onSwitch, onForgot }) {
@@ -9,6 +10,7 @@ export default function Login({ onSwitch, onForgot }) {
 
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,7 +20,17 @@ export default function Login({ onSwitch, onForgot }) {
       const data = await api('/auth/login/', { method: 'POST', body: { email, password } });
       if (data.token) localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify({ email }));
-      window.location.href = '/dashboard';
+      // After login, check if user is admin and route accordingly
+      try {
+        const me = await api('/auth/me/', { auth: true });
+        if (me?.is_admin) {
+          navigate('/admin', { replace: true });
+          return;
+        }
+      } catch (_) {
+        // ignore and fall back to dashboard
+      }
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

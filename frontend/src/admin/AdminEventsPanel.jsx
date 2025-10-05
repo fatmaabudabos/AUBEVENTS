@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../api";
 
 /**
  * AdminEventsPanel.jsx (frontend only)
@@ -18,9 +19,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  * - Change API_BASE if your backend lives elsewhere.
  */
 
-const API_BASE = typeof process !== "undefined" && process.env?.REACT_APP_API_BASE
-  ? process.env.REACT_APP_API_BASE
-  : ""; // e.g., "http://localhost:5000". Left blank to use same origin.
+// Using shared api() helper which reads VITE_API_BASE_URL and adds Authorization when auth: true
 
 // ----------------------
 // Utilities
@@ -65,23 +64,8 @@ const fromApiTimeToLocal = (apiTime) => {
 };
 
 async function apiJson(path, options = {}) {
-  const res = await fetch(API_BASE + path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    credentials: "include",
-    ...options,
-  });
-  const text = await res.text();
-  let payload = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch (_) {
-    payload = null;
-  }
-  if (!res.ok) {
-    const msg = payload?.error || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return payload;
+  const { method = 'GET', body } = options;
+  return api(path, { method, body: body ? JSON.parse(body) : undefined, auth: true });
 }
 
 // ----------------------
@@ -220,7 +204,7 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
     async function load() {
       if (mode !== "edit" || !eventId || initial) return;
       try {
-        const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
+  const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
         if (ignore) return;
         setField("title", data.title || "");
         setField("description", data.description || "");
@@ -260,10 +244,7 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
 
     try {
       if (mode === "create") {
-        const res = await apiJson(`/api/events`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+  const res = await apiJson(`/api/events`, { method: "POST", body: JSON.stringify(payload) });
         toast.success(res?.message || "Event created successfully");
         onCreated?.(res);
       } else {
@@ -287,10 +268,7 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
           toast.info("No changes to save");
           return;
         }
-        const res = await apiJson(`/api/events/${eventId}`, {
-          method: "PATCH",
-          body: JSON.stringify(patch),
-        });
+  const res = await apiJson(`/api/events/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) });
         toast.success(res?.message || "Event updated successfully");
         onUpdated?.(res);
       }
@@ -398,6 +376,7 @@ export default function AdminEventsPanel() {
   // Local cache of events created/edited during this session (because no list endpoint was specified).
   // You can remove this if you later implement GET /api/events for listing.
   const [localEvents, setLocalEvents] = useState([]);
+  const [serverEvents, setServerEvents] = useState([]);
 
   // UI state
   const [activeTab, setActiveTab] = useState("admin"); // "admin" | "user"
@@ -445,7 +424,7 @@ export default function AdminEventsPanel() {
   const doDelete = async () => {
     try {
       if (!editId) return;
-      await apiJson(`/api/events/${editId}`, { method: "DELETE" });
+  await apiJson(`/api/events/${editId}`, { method: "DELETE" });
       toast.success("Event deleted successfully");
       setLocalEvents((evs) => evs.filter((e) => String(e.id) !== String(editId)));
       setShowConfirm(false);
@@ -541,6 +520,17 @@ export default function AdminEventsPanel() {
                   Enter an event ID and click Load to edit it. The form will fetch current data using
                   <code className="ml-1 rounded bg-slate-100 px-1">GET /api/events/:id</code>.
                 </p>
+                <div className="mt-4 flex items-center gap-2">
+                  <Button variant="secondary" onClick={async () => {
+                    try {
+                      const res = await apiJson(`/api/events`, { method: "GET" });
+                      setServerEvents(res?.events || []);
+                      toast.success(`Loaded ${res?.events?.length ?? 0} events from server`);
+                    } catch (e) {
+                      toast.error(e.message || "Failed to load events");
+                    }
+                  }}>Refresh server events</Button>
+                </div>
               </div>
 
               <div className="mt-6">
@@ -564,6 +554,29 @@ export default function AdminEventsPanel() {
                       ))}
                     </ul>
                   )}
+                </div>
+                <div className="mt-6">
+                  <h4 className="text-sm font-semibold text-slate-700">Server events</h4>
+                  <p className="text-xs text-slate-600">Fetched via GET /api/events</p>
+                  <div className="mt-3 grid gap-2">
+                    {serverEvents.length === 0 ? (
+                      <div className="text-xs text-slate-500">No events fetched yet.</div>
+                    ) : (
+                      <ul className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+                        {serverEvents.map((e) => (
+                          <li key={e.id} className="p-3 hover:bg-slate-50 flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-semibold">#{String(e.id)} – {e.title || "Untitled"}</div>
+                              <div className="text-xs text-slate-600">{e.location} • {fromApiTimeToLocal(e.time)}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="secondary" onClick={() => { setEditId(String(e.id)); setMode("edit"); }}>Edit</Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

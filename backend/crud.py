@@ -10,13 +10,14 @@ between the API routes and the database functions.
 - It returns event objects or error messages for routes to handle
 """
 
-from typing import Optional
+from typing import Optional, List
 from sqlmodel import Session
 from datetime import datetime
 
 from backend.schemas import EventCreate, EventUpdate, EventOut
 from database.database import (
     create_event as db_create_event,
+    list_events as db_list_events,
     get_title, get_description, get_date, get_location,
     get_capacity, get_available_seats, get_speakers, get_organizer,
     update_title, update_description, update_date, update_location,
@@ -72,6 +73,23 @@ def get_event(event_id: int) -> Optional[EventOut]:
         organizers=get_organizer(event_id),
         speakers=get_speakers(event_id),
     )
+
+
+def list_all_events() -> List[EventOut]:
+    rows = db_list_events()
+    out: List[EventOut] = []
+    for r in rows:
+        out.append(EventOut(
+            id=r.id,
+            title=r.title,
+            description=r.description,
+            date=r.date,
+            location=r.location,
+            capacity=r.capacity,
+            organizers=r.organizers,
+            speakers=r.speakers,
+        ))
+    return out
 
 
 # ------------------------

@@ -1,5 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { api } from "./api";
 import Landing from "./Landing.jsx";
 import Login from "./Login.jsx";
 import Signup from "./Signup.jsx";
@@ -16,20 +17,33 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<LoginRedirect />} />
+  <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot" element={<ForgotPassword />} />
         <Route path="/reset/:token" element={<ResetPassword />} />
         <Route path="/verify/:token" element={<Verify />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/admin" element={<AdminEventsPanel />} />
+        <Route path="/admin" element={<AdminRoute />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
   );
 }
 
-// Temporary: all logins lead to admin panel
-function LoginRedirect() {
-  return <Navigate to="/admin" replace />;
+function AdminRoute() {
+  const [state, setState] = React.useState({ loading: true, allowed: false });
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await api('/auth/me/', { method: 'GET', auth: true });
+        if (!cancelled) setState({ loading: false, allowed: !!me?.is_admin });
+      } catch {
+        if (!cancelled) setState({ loading: false, allowed: false });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  if (state.loading) return <div style={{ padding: 16 }}>Checking permissions…</div>;
+  return state.allowed ? <AdminEventsPanel /> : <Navigate to="/login" replace />;
 }

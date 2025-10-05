@@ -3,7 +3,7 @@
 from sqlmodel import Session, select, create_engine
 from database.tables import Users
 from database.tables import Events
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from database.DB_Password import DATABASE_URL
 
@@ -335,3 +335,8 @@ def print_all_events():
 
         for event in events:
             print(f"{event.id:<3} | {event.title:<50}")
+
+# List all events
+def list_events() -> List[Events]:
+    with Session(get_engine()) as session:
+        return session.exec(select(Events)).all()
