@@ -1,0 +1,110 @@
+.events-page {
+  padding: 3rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.events-title {
+  font-size: 2.4rem;
+  color: #001f3f;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.event-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  text-align: left;
+}
+
+.event-card h3 {
+  color: #8b0000;
+  margin-bottom: 0.4rem;
+}
+
+.event-card p {
+  margin: 0.3rem 0;
+  color: #333;
+}
+
+.register-btn {
+  background: linear-gradient(90deg, #8b0000, #001f3f);
+  color: white;
+  border: none;
+  padding: 0.8rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 0.8rem;
+  transition: 0.2s;
+}
+.register-btn:hover {
+  background: linear-gradient(90deg, #001f3f, #8b0000);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 500px;
+}
+
+.modal h2 {
+  color: #001f3f;
+  margin-bottom: 1rem;
+}
+
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal input,
+.modal textarea {
+  border: 2px solid #001f3f;
+  border-radius: 8px;
+  padding: 0.8rem;
+  font-size: 1rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-actions button {
+  flex: 1;
+  border-radius: 8px;
+  padding: 0.8rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.secondary-btn {
+  background: #ccc;
+  color: #333;
+}
