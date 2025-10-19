@@ -1,6 +1,8 @@
 """
 Comprehensive integration test for backend.crud module.
 Covers admin (create, get, update, delete) and user (register/unregister/list) functions.
+pip install pytest
+run: pytest backend/test_crud.py -v
 """
 
 import pytest
