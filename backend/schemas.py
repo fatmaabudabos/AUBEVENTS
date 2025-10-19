@@ -122,8 +122,20 @@ class EventOut(BaseModel):
     date: datetime
     location: str
     capacity: int
+    available_seats: Optional[int]
     organizers: List[str]
     speakers: List[str]
 
     class Config:
         from_attributes = True  # allows reading from SQLModel/ORM objects
+
+
+class UserEventAction(BaseModel):
+    """Schema for user actions on an event (register/unregister)."""
+    event_id: int
+    email: str
+
+class UserEventResponse(BaseModel):
+    """Standardized response for user-event operations."""
+    success: bool
+    message: str
