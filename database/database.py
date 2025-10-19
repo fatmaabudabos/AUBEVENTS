@@ -275,13 +275,15 @@ def update_speakers(event_id: int, speakers: str) -> None:
 
 
 # --- Delete ---
-
-def delete_event(event_id: int):
+def delete_event(event_id: int) -> bool:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
-        if not event: return False
+        if not event:
+            return False
         session.delete(event)
         session.commit()
+        return True  # ✅ explicitly signal success
+
 
 #________________________________________________________________________________________________________________________________________________________
 # ------ User–Event linking functions ------
@@ -291,10 +293,14 @@ def register_user_to_event(user_email: str, event_id: int):
         user = session.get(Users, user_email)
         event = session.get(Events, event_id)
         if user and event:
-            if event not in user.events:
+            if event not in user.events and event.available_seats > 0:
                 user.events.append(event)
+                event.available_seats -= 1
                 session.add(user)
+                session.add(event)
                 session.commit()
+                return True
+        return False
 
 def unregister_user_from_event(user_email: str, event_id: int):
     with Session(get_engine()) as session:
@@ -302,15 +308,28 @@ def unregister_user_from_event(user_email: str, event_id: int):
         event = session.get(Events, event_id)
         if user and event and event in user.events:
             user.events.remove(event)
+            event.available_seats += 1
             session.add(user)
+            session.add(event)
             session.commit()
-
+            return True
+        return False
 def get_user_events(user_email: str) -> list[int]:
     with Session(get_engine()) as session:
         user = session.get(Users, user_email)
         if not user:
             return []
-        return [event.id for event in user.events]
+        return [
+            {
+                "id": event.id,
+                "title": event.title,
+                "description": event.description,
+                "date": event.date,
+                "location": event.location,
+                "available_seats": event.available_seats,
+            }
+            for event in user.events
+        ]
 
 def get_event_users(event_id: int) -> list[str]:
     with Session(get_engine()) as session:
