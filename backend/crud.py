@@ -1,34 +1,71 @@
 """
 crud.py
 -------
-This file contains higher-level CRUD operations that sit
-between the API routes and the database functions.
+Higher-level CRUD operations that sit between API routes and DB functions.
 
-- It imports low-level DB operations from database.py
-- It accepts validated schemas (EventCreate, EventUpdate)
-- It applies business rules (capacity, non-empty lists)
-- It returns event objects or error messages for routes to handle
-- Contains admin: create,update,delete and user: register,unregister
+- Imports low-level DB operations from database.py
+- Accepts validated schemas (EventCreate, EventUpdate)
+- Applies business rules (capacity, non-empty lists)
+- Returns EventOut objects or simple status responses for routes to handle
+- Contains admin: create, update, delete and user: register, unregister
 """
 
-from typing import Optional, List
-from sqlmodel import Session
+from typing import Optional, List, Any
 from datetime import datetime
 
-from backend.schemas import EventCreate, EventUpdate, EventOut, UserEventAction, UserEventResponse
+from backend.schemas import (
+    EventCreate,
+    EventUpdate,
+    EventOut,
+    UserEventAction,
+    UserEventResponse,
+)
 from database.database import (
     create_event as db_create_event,
     list_events as db_list_events,
     register_user_to_event as db_register_user_to_event,
     unregister_user_from_event as db_unregister_user_from_event,
     get_user_events as db_get_user_events,
-    get_title, get_description, get_date, get_location,
-    get_capacity, get_available_seats, get_speakers, get_organizer,
-    update_title, update_description, update_date, update_location,
-    update_capacity, update_available_seats, update_speakers,
-    update_organizer, delete_event,
+    get_title,
+    get_description,
+    get_date,
+    get_location,
+    get_capacity,
+    get_available_seats,
+    get_speakers,
+    get_organizer,
+    update_title,
+    update_description,
+    update_date,
+    update_location,
+    update_capacity,
+    update_available_seats,
+    update_speakers,
+    update_organizer,
+    delete_event,
 )
 from database.tables import Events
+
+
+# ------------------------
+# Helpers
+# ------------------------
+def _row_to_eventout(r: Any) -> EventOut:
+    """
+    Convert a DB row/object (with dot attributes) into EventOut.
+    Safely handles optional attributes (organizers/speakers may be None).
+    """
+    return EventOut(
+        id=r.id,
+        title=getattr(r, "title", None),
+        description=getattr(r, "description", None),
+        date=getattr(r, "date", None),
+        location=getattr(r, "location", None),
+        capacity=getattr(r, "capacity", None),
+        available_seats=getattr(r, "available_seats", None),
+        organizers=getattr(r, "organizers", []) or [],
+        speakers=getattr(r, "speakers", []) or [],
+    )
 
 
 # ------------------------
@@ -47,7 +84,7 @@ def create_event(event_in: EventCreate) -> Events:
         capacity=event_in.capacity,
         available_seats=event_in.capacity,  # initially full capacity
     )
-    # organizers & speakers (lists) handled if DB updated to JSON fields
+    # organizers & speakers (lists) handled if DB supports JSON/text arrays
     if event_in.organizers:
         update_organizer(event.id, event_in.organizers)
     if event_in.speakers:
@@ -57,11 +94,12 @@ def create_event(event_in: EventCreate) -> Events:
 
 
 # ------------------------
-# Get
+# Get (single + list)
 # ------------------------
 def get_event(event_id: int) -> Optional[EventOut]:
     """
-    Return a full event as EventOut schema for the frontend.
+    Return a full event as EventOut for the frontend; None if not found.
+    (Pulls scalar fields using your DB accessors.)
     """
     title = get_title(event_id)
     if title is None:
@@ -75,39 +113,28 @@ def get_event(event_id: int) -> Optional[EventOut]:
         location=get_location(event_id),
         capacity=get_capacity(event_id),
         available_seats=get_available_seats(event_id),
-        organizers=get_organizer(event_id),
-        speakers=get_speakers(event_id),
+        organizers=get_organizer(event_id) or [],
+        speakers=get_speakers(event_id) or [],
     )
 
 
 def list_all_events() -> List[EventOut]:
+    """
+    Return all events as EventOut, ordered by whatever db_list_events provides.
+    """
     rows = db_list_events()
-    out: List[EventOut] = []
-    for r in rows:
-        out.append(EventOut(
-            id=r.id,
-            title=r.title,
-            description=r.description,
-            date=r.date,
-            location=r.location,
-            capacity=r.capacity,
-            available_seats=r.available_seats,
-            organizers=r.organizers,
-            speakers=r.speakers,
-        ))
-    return out
+    return [_row_to_eventout(r) for r in rows]
 
 
 # ------------------------
 # Update (PATCH)
 # ------------------------
-def update_event(event_id: int, event_in: EventUpdate):
+def update_event(event_id: int, event_in: EventUpdate) -> Optional[EventOut]:
     """
-    Partially update an event (PATCH).
-    Only apply fields that are present.
-    Adjust available seats when capacity changes.
+    Partially update an event (PATCH). Only apply provided fields.
+    Adjust available seats logically when capacity changes.
+    Returns the updated EventOut, or None if the event no longer exists.
     """
-
     # title, desc, date, etc.
     if event_in.title is not None:
         update_title(event_id, event_in.title)
@@ -122,7 +149,7 @@ def update_event(event_id: int, event_in: EventUpdate):
     if event_in.speakers is not None:
         update_speakers(event_id, event_in.speakers)
 
-    # ✅ Handle capacity change via existing DB helpers
+    # Handle capacity/available_seats coupling
     if event_in.capacity is not None:
         old_capacity = get_capacity(event_id)
         old_available = get_available_seats(event_id)
@@ -139,38 +166,43 @@ def update_event(event_id: int, event_in: EventUpdate):
                 new_available = min(old_available, event_in.capacity)
             update_available_seats(event_id, new_available)
 
-    # Finally return the updated event as EventOut
     return get_event(event_id)
 
 
 # ------------------------
 # Delete
 # ------------------------
-# database/database.py
 def delete_event_by_id(event_id: int) -> bool:
+    """
+    Delete event and return True if successful.
+    """
     return delete_event(event_id)
 
 
-#-----------------------------------------------
+# -----------------------------------------------
 # User functions
-#-----------------------------------------------
-
+# -----------------------------------------------
 def register_user(data: UserEventAction) -> UserEventResponse:
+    """
+    Register a user (by email) to an event (by id).
+    """
     success = db_register_user_to_event(data.email, data.event_id)
     msg = "User registered successfully." if success else "Registration failed."
     return UserEventResponse(success=bool(success), message=msg)
 
 
 def unregister_user(data: UserEventAction) -> UserEventResponse:
+    """
+    Unregister a user (by email) from an event (by id).
+    """
     success = db_unregister_user_from_event(data.email, data.event_id)
     msg = "User unregistered successfully." if success else "Unregistration failed."
     return UserEventResponse(success=bool(success), message=msg)
 
 
-def list_user_events(user_email: str):
+def list_user_events(user_email: str) -> List[EventOut]:
     """
-    Returns a list of event objects (ready for JSON serialization).
-    Each event is a dict.
+    Return all events that a given user is registered for, as EventOut list.
     """
-    return db_get_user_events(user_email)
-
+    rows = db_get_user_events(user_email)
+    return [_row_to_eventout(r) for r in rows]

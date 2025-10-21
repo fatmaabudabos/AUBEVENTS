@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import "./Auth.css";
 import { api } from './api';
+import { useNavigate } from 'react-router-dom';
 
 export default function Signup({ onSwitch }) {
   // Prefill demo values but allow editing
@@ -13,6 +14,7 @@ export default function Signup({ onSwitch }) {
   const [verificationCode, setVerificationCode] = useState("");
   const [serverTokenHint, setServerTokenHint] = useState(null); // dev helper
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -40,7 +42,23 @@ export default function Signup({ onSwitch }) {
     try {
       setLoading(true);
       await api('/auth/verify/', { method: 'POST', body: { email, token: verificationCode } });
-      window.location.href = '/login';
+      // Auto-login after successful verification, then redirect by role
+      try {
+        const loginRes = await api('/auth/login/', { method: 'POST', body: { email, password } });
+        if (loginRes?.token) localStorage.setItem('token', loginRes.token);
+        localStorage.setItem('user', JSON.stringify({ email }));
+        try {
+          const me = await api('/auth/me/', { auth: true });
+          if (me?.is_admin) {
+            navigate('/admin', { replace: true });
+            return;
+          }
+        } catch (_) { /* fallthrough to dashboard */ }
+        navigate('/dashboard', { replace: true });
+      } catch (_) {
+        // Fallback to login screen if auto-login fails
+        navigate('/login', { replace: true });
+      }
     } catch (err) {
       setError(err.message);
     } finally {
