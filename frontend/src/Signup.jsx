@@ -1,5 +1,6 @@
 
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Auth.css";
 import { api } from './api';
 
@@ -13,6 +14,7 @@ export default function Signup({ onSwitch }) {
   const [verificationCode, setVerificationCode] = useState("");
   const [serverTokenHint, setServerTokenHint] = useState(null); // dev helper
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -63,7 +65,7 @@ export default function Signup({ onSwitch }) {
         <form onSubmit={handleVerify}>
           <p>Enter the verification code sent to <b>{email}</b>.</p>
           {serverTokenHint && (
-            <p style={{fontSize:'0.8rem', opacity:0.7}}>Dev hint code: {serverTokenHint}</p>
+            <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Dev hint code: {serverTokenHint}</p>
           )}
           <input type="text" value={verificationCode} onChange={e => setVerificationCode(e.target.value)} placeholder="Verification Code" required />
           <button type="submit" disabled={loading}>{loading ? 'Verifying...' : 'Verify'}</button>
@@ -71,7 +73,7 @@ export default function Signup({ onSwitch }) {
         </form>
       )}
       <p>
-        Already have an account? <button className="link" onClick={onSwitch}>Login</button>
+        Already have an account? <button className="link" onClick={() => onSwitch ? onSwitch() : navigate('/login')}>Login</button>
       </p>
     </div>
   );

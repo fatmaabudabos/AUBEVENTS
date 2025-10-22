@@ -184,7 +184,7 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
     async function load() {
       if (mode !== "edit" || !eventId || initial) return;
       try {
-  const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
+        const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
         if (ignore) return;
         setField("title", data.title || "");
         setField("description", data.description || "");
@@ -224,9 +224,17 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
 
     try {
       if (mode === "create") {
-  const res = await apiJson(`/api/events`, { method: "POST", body: JSON.stringify(payload) });
+        const res = await apiJson(`/api/events`, { method: "POST", body: JSON.stringify(payload) });
         toast.success(res?.message || "Event created successfully");
         onCreated?.(res);
+        // Clear form fields after successful create
+        setField("title", "");
+        setField("description", "");
+        setField("time", "");
+        setField("location", "");
+        setField("capacity", "");
+        setField("organizers", "");
+        setField("speakers", "");
       } else {
         // For PATCH, send only changed fields
         const patch = {};
@@ -248,7 +256,7 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
           toast.info("No changes to save");
           return;
         }
-  const res = await apiJson(`/api/events/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) });
+        const res = await apiJson(`/api/events/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) });
         toast.success(res?.message || "Event updated successfully");
         onUpdated?.(res);
       }
@@ -404,7 +412,7 @@ export default function AdminEventsPanel() {
   const doDelete = async () => {
     try {
       if (!editId) return;
-  await apiJson(`/api/events/${editId}`, { method: "DELETE" });
+      await apiJson(`/api/events/${editId}`, { method: "DELETE" });
       toast.success("Event deleted successfully");
       setLocalEvents((evs) => evs.filter((e) => String(e.id) !== String(editId)));
       setShowConfirm(false);
