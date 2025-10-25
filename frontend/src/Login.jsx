@@ -44,13 +44,13 @@ export default function Login({ onSwitch, onForgot }) {
       <form onSubmit={handleSubmit}>
         <input type="email" name="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required style={{ fontSize: '1.2rem' }} />
         <input type="password" name="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required style={{ fontSize: '1.2rem' }} />
-  <button type="submit" style={{ fontSize: '1.2rem', padding: '1rem' }} disabled={loading}>{loading ? 'Logging in...' : 'Log In'}</button>
-  {error && <div className="flash err" style={{marginTop:'0.5rem'}}>{error}</div>}
+        <button type="submit" style={{ fontSize: '1.2rem', padding: '1rem' }} disabled={loading}>{loading ? 'Logging in...' : 'Log In'}</button>
+        {error && <div className="flash err" style={{ marginTop: '0.5rem' }}>{error}</div>}
       </form>
       <div className="login-links">
-        <button className="link" onClick={onForgot}>Forgot Password?</button>
+        <button className="link" onClick={() => onForgot ? onForgot() : navigate('/forgot')}>Forgot Password?</button>
         <span> | </span>
-        <button className="link" onClick={onSwitch}>Sign Up</button>
+        <button className="link" onClick={() => onSwitch ? onSwitch() : navigate('/signup')}>Sign Up</button>
       </div>
     </div>
   );
