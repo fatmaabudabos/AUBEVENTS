@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Calendar, MapPin, Users, Clock, Search, LogOut, CheckCircle, Plus } from 'lucide-react';
 import { api } from './api';
 import './Dashboard.css';
 
@@ -9,6 +10,7 @@ function Dashboard() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -51,13 +53,22 @@ function Dashboard() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return events;
-    return events.filter(e =>
-      String(e.title || '').toLowerCase().includes(q) ||
-      String(e.location || '').toLowerCase().includes(q) ||
-      String(e.description || '').toLowerCase().includes(q)
-    );
-  }, [events, query]);
+    let result = events;
+    
+    if (q) {
+      result = result.filter(e =>
+        String(e.title || '').toLowerCase().includes(q) ||
+        String(e.location || '').toLowerCase().includes(q) ||
+        String(e.description || '').toLowerCase().includes(q)
+      );
+    }
+    
+    if (activeTab === 'registered') {
+      result = result.filter(e => myEventIds.has(e.id));
+    }
+    
+    return result;
+  }, [events, query, activeTab, myEventIds]);
 
   const onLogout = () => {
     localStorage.removeItem('token');
@@ -83,52 +94,146 @@ function Dashboard() {
     }
   };
 
+  const formatDate = (dateStr) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Welcome, {user.name}!</h1>
-        <button className="logout-btn" onClick={onLogout}>Log out</button>
+        <div className="header-content">
+          <div className="user-info">
+            <div className="avatar">{user.name.charAt(0).toUpperCase()}</div>
+            <div>
+              <h1>Welcome back, {user.name}!</h1>
+              <p className="user-email">{user.email}</p>
+            </div>
+          </div>
+          <button className="logout-btn" onClick={onLogout}>
+            <LogOut size={18} />
+            Log out
+          </button>
+        </div>
       </div>
 
       <div className="dashboard-main">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <Calendar className="stat-icon" />
+            <div>
+              <h3>{events.length}</h3>
+              <p>Total Events</p>
+            </div>
+          </div>
+          <div className="stat-card">
+            <CheckCircle className="stat-icon registered" />
+            <div>
+              <h3>{myEventIds.size}</h3>
+              <p>Registered Events</p>
+            </div>
+          </div>
+        </div>
+
         <div className="events-section">
-          <h2>Upcoming Events</h2>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <div className="section-header">
+            <h2>Events</h2>
+            <div className="tabs">
+              <button 
+                className={`tab ${activeTab === 'all' ? 'active' : ''}`}
+                onClick={() => setActiveTab('all')}
+              >
+                All Events
+              </button>
+              <button 
+                className={`tab ${activeTab === 'registered' ? 'active' : ''}`}
+                onClick={() => setActiveTab('registered')}
+              >
+                My Events
+              </button>
+            </div>
+          </div>
+          
+          <div className="search-bar">
+            <Search className="search-icon" size={20} />
             <input
               type="text"
-              placeholder="Search by title, location, or description..."
+              placeholder="Search events by title, location, or description..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid #ddd' }}
             />
           </div>
 
           {loading ? (
-            <div>Loading…</div>
+            <div className="loading">Loading events...</div>
           ) : error ? (
-            <div className="flash err">{error}</div>
+            <div className="error">{error}</div>
           ) : (
-            <div className="events-list">
+            <div className="events-grid">
               {filtered.length === 0 ? (
-                <div>No events match your search.</div>
+                <div className="no-events">
+                  {activeTab === 'registered' ? 
+                    "You haven't registered for any events yet." : 
+                    "No events match your search."
+                  }
+                </div>
               ) : (
                 filtered.map(evt => (
-                  <div key={evt.id} className="event-card">
-                    <h3>{evt.title}</h3>
-                    {evt.time && (
-                      <p style={{ margin: '6px 0' }}>🕒 {evt.time.replace('T', ' ')}</p>
+                  <div key={evt.id} className={`event-card ${myEventIds.has(evt.id) ? 'registered' : ''}`}>
+                    <div className="event-header">
+                      <h3>{evt.title}</h3>
+                      {myEventIds.has(evt.id) && <CheckCircle className="registered-badge" size={20} />}
+                    </div>
+                    
+                    {evt.description && (
+                      <p className="event-description">{evt.description}</p>
                     )}
-                    {evt.location && (
-                      <p style={{ margin: '6px 0' }}>📍 {evt.location}</p>
-                    )}
-                    {typeof evt.capacity === 'number' && (
-                      <p style={{ margin: '6px 0' }}>Capacity: {evt.capacity}</p>
-                    )}
-                    <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                    
+                    <div className="event-details">
+                      {evt.time && (
+                        <div className="detail">
+                          <Clock size={16} />
+                          <span>{formatDate(evt.time)}</span>
+                        </div>
+                      )}
+                      {evt.location && (
+                        <div className="detail">
+                          <MapPin size={16} />
+                          <span>{evt.location}</span>
+                        </div>
+                      )}
+                      {typeof evt.capacity === 'number' && (
+                        <div className="detail">
+                          <Users size={16} />
+                          <span>Capacity: {evt.capacity}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="event-actions">
                       {myEventIds.has(evt.id) ? (
-                        <button onClick={() => unregister(evt.id)} className="logout-btn" style={{ background: '#6c757d' }}>Unregister</button>
+                        <button 
+                          onClick={() => unregister(evt.id)} 
+                          className="btn btn-secondary"
+                        >
+                          Unregister
+                        </button>
                       ) : (
-                        <button onClick={() => register(evt.id)} className="logout-btn" style={{ background: '#28a745' }}>Register</button>
+                        <button 
+                          onClick={() => register(evt.id)} 
+                          className="btn btn-primary"
+                        >
+                          <Plus size={16} />
+                          Register
+                        </button>
                       )}
                     </div>
                   </div>
