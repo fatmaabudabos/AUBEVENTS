@@ -87,8 +87,11 @@ if _cors_env:
     CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()]
 else:
     CORS_ALLOWED_ORIGINS = [
-        "http://localhost:5173",  # Vite default
-        "http://localhost:3000",  # CRA/Next.js default
+        # Localhost variants commonly used by dev servers
+        "http://localhost:5173",   # Vite default
+        "http://127.0.0.1:5173",   # Vite opened via 127.0.0.1
+        "http://localhost:3000",   # CRA/Next.js default
+        "http://127.0.0.1:3000",   # CRA opened via 127.0.0.1
     ]
 # For quick demo only (not for prod):
 # CORS_ALLOW_ALL_ORIGINS = True

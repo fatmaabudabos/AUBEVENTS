@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Auth.css";
 import { api } from './api';
-import { useNavigate } from 'react-router-dom';
 
 export default function Signup({ onSwitch }) {
   // Prefill demo values but allow editing
