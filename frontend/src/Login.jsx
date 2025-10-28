@@ -19,10 +19,14 @@ export default function Login({ onSwitch, onForgot }) {
       setLoading(true);
       const data = await api('/auth/login/', { method: 'POST', body: { email, password } });
       if (data.token) localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify({ email }));
+      // Tentatively store user with derived name; will refine after /auth/me
+      localStorage.setItem('user', JSON.stringify({ email, name: email.split('@')[0] }));
       // After login, check if user is admin and route accordingly
       try {
         const me = await api('/auth/me/', { auth: true });
+        if (me?.name) {
+          localStorage.setItem('user', JSON.stringify({ email: me.email, name: me.name }));
+        }
         if (me?.is_admin) {
           navigate('/admin', { replace: true });
           return;

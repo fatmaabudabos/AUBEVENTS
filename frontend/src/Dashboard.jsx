@@ -20,12 +20,13 @@ function Dashboard() {
         // Load user profile
         try {
           const me = await api('/auth/me/', { auth: true });
-          if (!cancelled) setUser({ name: me.email.split('@')[0], email: me.email });
+          if (!cancelled) setUser({ name: me.name || me.email.split('@')[0], email: me.email });
         } catch {
           const cached = localStorage.getItem('user');
           if (cached && !cancelled) {
             const u = JSON.parse(cached);
-            setUser({ name: (u.email || u.name || 'User').split?.('@')[0] || 'User', email: u.email || '' });
+            const display = u.name || (u.email ? u.email.split('@')[0] : 'User');
+            setUser({ name: display, email: u.email || '' });
           }
         }
 

@@ -114,6 +114,8 @@ def me(request):
         return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
     return Response({
         "email": user.email,
+        # Prefer stored name if present; otherwise derive from email prefix for UX
+        "name": getattr(user, "name", None) or (user.email.split("@")[0] if user.email else None),
         "is_verified": user.is_verified,
         "is_admin": getattr(user, "is_admin", False),
     }, status=status.HTTP_200_OK)

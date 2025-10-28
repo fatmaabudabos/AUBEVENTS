@@ -6,6 +6,7 @@ import { api } from './api';
 
 export default function Signup({ onSwitch }) {
   // Prefill demo values but allow editing
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,7 +26,7 @@ export default function Signup({ onSwitch }) {
     }
     try {
       setLoading(true);
-      const res = await api('/auth/signup/', { method: 'POST', body: { email, password } });
+      const res = await api('/auth/signup/', { method: 'POST', body: { name, email, password } });
       // In development the backend returns verification_token for convenience
       if (res.verification_token) setServerTokenHint(res.verification_token);
       setStep(2);
@@ -46,9 +47,13 @@ export default function Signup({ onSwitch }) {
       try {
         const loginRes = await api('/auth/login/', { method: 'POST', body: { email, password } });
         if (loginRes?.token) localStorage.setItem('token', loginRes.token);
-        localStorage.setItem('user', JSON.stringify({ email }));
+        // Store display name for dashboard welcome
+        localStorage.setItem('user', JSON.stringify({ email, name: name || email.split('@')[0] }));
         try {
           const me = await api('/auth/me/', { auth: true });
+          if (me?.name) {
+            localStorage.setItem('user', JSON.stringify({ email: me.email, name: me.name }));
+          }
           if (me?.is_admin) {
             navigate('/admin', { replace: true });
             return;
@@ -71,6 +76,7 @@ export default function Signup({ onSwitch }) {
       <h2>Sign Up</h2>
       {step === 1 ? (
         <form onSubmit={handleSignup}>
+          <input type="text" name="name" value={name} onChange={e => setName(e.target.value)} placeholder="Full name" required />
           <input type="email" name="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required />
           <input type="password" name="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (min 8 chars)" minLength={8} required />
           <input type="password" name="confirmPassword" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm Password" minLength={8} required />

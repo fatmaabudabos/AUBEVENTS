@@ -63,6 +63,14 @@ export default function Landing() {
             <Star size={24} />
             <span>Campus Life</span>
           </div>
+          <div className="floating-card delay-3">
+            <MapPin size={24} />
+            <span>AUB Campus</span>
+          </div>
+          <div className="floating-card delay-4">
+            <Calendar size={24} />
+            <span>Workshops</span>
+          </div>
         </div>
       </div>
       
