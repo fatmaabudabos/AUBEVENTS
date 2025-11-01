@@ -30,7 +30,7 @@ function Dashboard() {
           }
         }
 
-        // Load all events (public)
+        // Load all events (public) - initial load; search effect will also refetch when query/activeTab changes
         const list = await api('/api/events', { method: 'GET' });
         if (!cancelled) setEvents(list.events || []);
 
@@ -52,10 +52,38 @@ function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
+  // Fetch events from backend when the search query or active tab changes.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const q = (query || '').trim();
+        let path = activeTab === 'all' ? '/api/events' : '/api/my/events';
+        if (q) path += `?q=${encodeURIComponent(q)}`;
+        const res = await api(path, { method: 'GET', auth: activeTab !== 'all' });
+        if (cancelled) return;
+        setEvents(res.events || []);
+        // Keep myEventIds in sync when viewing registered events
+        if (activeTab === 'registered') {
+          const ids = new Set((res.events || []).map(e => e.id));
+          setMyEventIds(ids);
+        }
+        setError('');
+      } catch (e) {
+        if (!cancelled) setError(e.message || 'Search failed');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 300); // debounce
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, activeTab]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let result = events;
-    
+
     if (q) {
       result = result.filter(e =>
         String(e.title || '').toLowerCase().includes(q) ||
@@ -63,11 +91,11 @@ function Dashboard() {
         String(e.description || '').toLowerCase().includes(q)
       );
     }
-    
+
     if (activeTab === 'registered') {
       result = result.filter(e => myEventIds.has(e.id));
     }
-    
+
     return result;
   }, [events, query, activeTab, myEventIds]);
 
@@ -79,8 +107,21 @@ function Dashboard() {
 
   const register = async (id) => {
     try {
-      await api('/api/events/register', { method: 'POST', body: { event_id: id }, auth: true });
+      const res = await api('/api/events/register', { method: 'POST', body: { event_id: id }, auth: true });
+      // Mark as registered
       setMyEventIds(prev => new Set([...Array.from(prev), id]));
+      // Optimistically decrement available seats in local state
+      setEvents(prev => prev.map(e => {
+        if (e.id !== id) return e;
+        const cur = typeof e.available_seats === 'number' ? e.available_seats : null;
+        if (cur === null) return e;
+        const next = Math.max(0, cur - 1);
+        return { ...e, available_seats: next };
+      }));
+      if (res && res.message) {
+        // Optional: lightweight feedback
+        // console.log(res.message);
+      }
     } catch (e) {
       alert(e.message || 'Registration failed');
     }
@@ -88,8 +129,22 @@ function Dashboard() {
 
   const unregister = async (id) => {
     try {
-      await api('/api/events/unregister', { method: 'POST', body: { event_id: id }, auth: true });
+      const res = await api('/api/events/unregister', { method: 'POST', body: { event_id: id }, auth: true });
+      // Remove from my registrations
       setMyEventIds(prev => { const copy = new Set(prev); copy.delete(id); return copy; });
+      // Optimistically increment available seats (bounded by capacity)
+      setEvents(prev => prev.map(e => {
+        if (e.id !== id) return e;
+        const cur = typeof e.available_seats === 'number' ? e.available_seats : null;
+        const cap = typeof e.capacity === 'number' ? e.capacity : null;
+        if (cur === null) return e;
+        const next = Math.min(cap ?? cur + 1, cur + 1);
+        return { ...e, available_seats: next };
+      }));
+      if (res && res.message) {
+        // Optional: lightweight feedback
+        // console.log(res.message);
+      }
     } catch (e) {
       alert(e.message || 'Unregistration failed');
     }
@@ -148,13 +203,13 @@ function Dashboard() {
           <div className="section-header">
             <h2>Events</h2>
             <div className="tabs">
-              <button 
+              <button
                 className={`tab ${activeTab === 'all' ? 'active' : ''}`}
                 onClick={() => setActiveTab('all')}
               >
                 All Events
               </button>
-              <button 
+              <button
                 className={`tab ${activeTab === 'registered' ? 'active' : ''}`}
                 onClick={() => setActiveTab('registered')}
               >
@@ -162,7 +217,7 @@ function Dashboard() {
               </button>
             </div>
           </div>
-          
+
           <div className="search-bar">
             <Search className="search-icon" size={20} />
             <input
@@ -181,8 +236,8 @@ function Dashboard() {
             <div className="events-grid">
               {filtered.length === 0 ? (
                 <div className="no-events">
-                  {activeTab === 'registered' ? 
-                    "You haven't registered for any events yet." : 
+                  {activeTab === 'registered' ?
+                    "You haven't registered for any events yet." :
                     "No events match your search."
                   }
                 </div>
@@ -193,11 +248,11 @@ function Dashboard() {
                       <h3>{evt.title}</h3>
                       {myEventIds.has(evt.id) && <CheckCircle className="registered-badge" size={20} />}
                     </div>
-                    
+
                     {evt.description && (
                       <p className="event-description">{evt.description}</p>
                     )}
-                    
+
                     <div className="event-details">
                       {evt.time && (
                         <div className="detail">
@@ -214,27 +269,45 @@ function Dashboard() {
                       {typeof evt.capacity === 'number' && (
                         <div className="detail">
                           <Users size={16} />
-                          <span>Capacity: {evt.capacity}</span>
+                          <span>
+                            Capacity: {evt.capacity}
+                            {typeof evt.available_seats === 'number' && (
+                              <>
+                                <span> · </span>
+                                {evt.available_seats <= 0 ? (
+                                  <strong>Full</strong>
+                                ) : (
+                                  <strong>Available: {evt.available_seats}</strong>
+                                )}
+                              </>
+                            )}
+                          </span>
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="event-actions">
                       {myEventIds.has(evt.id) ? (
-                        <button 
-                          onClick={() => unregister(evt.id)} 
+                        <button
+                          onClick={() => unregister(evt.id)}
                           className="btn btn-secondary"
                         >
                           Unregister
                         </button>
                       ) : (
-                        <button 
-                          onClick={() => register(evt.id)} 
-                          className="btn btn-primary"
-                        >
-                          <Plus size={16} />
-                          Register
-                        </button>
+                        (() => {
+                          const isFull = typeof evt.available_seats === 'number' && evt.available_seats <= 0;
+                          return (
+                            <button
+                              onClick={() => register(evt.id)}
+                              className={`btn ${isFull ? 'btn-disabled' : 'btn-primary'}`}
+                              disabled={isFull}
+                              title={isFull ? 'Event is full' : 'Register'}
+                            >
+                              {isFull ? 'Full' : (<><Plus size={16} /> Register</>)}
+                            </button>
+                          );
+                        })()
                       )}
                     </div>
                   </div>

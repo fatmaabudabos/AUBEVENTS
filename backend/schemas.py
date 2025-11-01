@@ -139,3 +139,4 @@ class UserEventResponse(BaseModel):
     """Standardized response for user-event operations."""
     success: bool
     message: str
+    reason: Optional[str] = None

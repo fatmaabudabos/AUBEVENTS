@@ -301,6 +301,12 @@
   transform: translateY(-1px);
 }
 
+.btn-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
 .btn-secondary {
   background: #6c757d;
   color: white;
@@ -311,7 +317,9 @@
   transform: translateY(-1px);
 }
 
-.loading, .error, .no-events {
+.loading,
+.error,
+.no-events {
   text-align: center;
   padding: 48px 32px;
   color: #666;
@@ -330,25 +338,25 @@
   .dashboard {
     padding: 16px;
   }
-  
+
   .header-content {
     padding: 20px;
     flex-direction: column;
     gap: 16px;
     text-align: center;
   }
-  
+
   .section-header {
     flex-direction: column;
     gap: 16px;
     align-items: stretch;
   }
-  
+
   .events-grid {
     grid-template-columns: 1fr;
     padding: 0 20px 20px 20px;
   }
-  
+
   .search-bar {
     margin: 0 20px 24px 20px;
   }

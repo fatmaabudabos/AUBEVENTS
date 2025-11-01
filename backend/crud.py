@@ -118,11 +118,11 @@ def get_event(event_id: int) -> Optional[EventOut]:
     )
 
 
-def list_all_events() -> List[EventOut]:
+def list_all_events(search: Optional[str] = None) -> List[EventOut]:
     """
-    Return all events as EventOut, ordered by whatever db_list_events provides.
+    Return events as EventOut; if `search` provided, filter by title/location/description.
     """
-    rows = db_list_events()
+    rows = db_list_events(search)
     return [_row_to_eventout(r) for r in rows]
 
 
@@ -186,9 +186,19 @@ def register_user(data: UserEventAction) -> UserEventResponse:
     """
     Register a user (by email) to an event (by id).
     """
-    success = db_register_user_to_event(data.email, data.event_id)
-    msg = "User registered successfully." if success else "Registration failed."
-    return UserEventResponse(success=bool(success), message=msg)
+    success, reason = db_register_user_to_event(data.email, data.event_id)
+    if success:
+        msg = "User registered successfully."
+    else:
+        if reason == 'full':
+            msg = "Event is full."
+        elif reason == 'already_registered':
+            msg = "User already registered for event."
+        elif reason == 'not_found':
+            msg = "User or event not found."
+        else:
+            msg = "Registration failed."
+    return UserEventResponse(success=bool(success), message=msg, reason=reason)
 
 
 def unregister_user(data: UserEventAction) -> UserEventResponse:
@@ -200,9 +210,33 @@ def unregister_user(data: UserEventAction) -> UserEventResponse:
     return UserEventResponse(success=bool(success), message=msg)
 
 
-def list_user_events(user_email: str) -> List[EventOut]:
+def list_user_events(user_email: str, search: Optional[str] = None) -> List[EventOut]:
     """
-    Return all events that a given user is registered for, as EventOut list.
+    Return events that a given user is registered for, as EventOut list.
+    If `search` provided, filter by title/location/description.
     """
-    rows = db_get_user_events(user_email)
-    return [_row_to_eventout(r) for r in rows]
+    rows = db_get_user_events(user_email, search)
+    out: list[EventOut] = []
+    from datetime import datetime
+    for r in rows:
+        # db_get_user_events may return DB model objects (with attributes) or dicts
+        if isinstance(r, dict):
+            # Ensure required EventOut fields are present and valid.
+            cap = r.get('capacity')
+            if cap is None:
+                cap = 2  # sensible default to satisfy EventOut validation (>1)
+            dt = r.get('date') or datetime.utcnow()
+            out.append(EventOut(
+                id=int(r.get('id')),
+                title=str(r.get('title') or ''),
+                description=r.get('description'),
+                date=dt,
+                location=str(r.get('location') or ''),
+                capacity=int(cap),
+                available_seats=r.get('available_seats'),
+                organizers=r.get('organizers') or [],
+                speakers=r.get('speakers') or [],
+            ))
+        else:
+            out.append(_row_to_eventout(r))
+    return out
