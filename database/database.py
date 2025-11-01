@@ -5,8 +5,11 @@ from database.tables import Users
 from database.tables import Events
 from typing import Optional, List
 from datetime import datetime
-from database.DB_Password import DATABASE_URL
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL, echo=False)
 
 def get_engine():
@@ -359,3 +362,4 @@ def print_all_events():
 def list_events() -> List[Events]:
     with Session(get_engine()) as session:
         return session.exec(select(Events)).all()
+
