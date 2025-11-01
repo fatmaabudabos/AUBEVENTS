@@ -98,4 +98,31 @@
   margin-top: 1.2rem;
 }
 
+/* Flash message styles (errors, warnings, info) */
+.flash {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  max-width: 100%;
+}
+
+.flash.err {
+  background: #ffeceb; /* very light red */
+  color: #8b0000; /* deep red for strong contrast */
+  border: 1px solid rgba(139,0,0,0.12);
+}
+
+.flash.warn {
+  background: #fff7e6;
+  color: #8a5a00;
+  border: 1px solid rgba(138,90,0,0.12);
+}
+
+.flash.info {
+  background: #e9f5ff;
+  color: #003d66;
+  border: 1px solid rgba(0,61,102,0.08);
+}
+
 

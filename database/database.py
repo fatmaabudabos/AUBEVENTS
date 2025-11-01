@@ -1,12 +1,16 @@
 # List of database functions to be used in the backend
 
 from sqlmodel import Session, select, create_engine
+from sqlalchemy import or_, update
 from database.tables import Users
 from database.tables import Events
 from typing import Optional, List
 from datetime import datetime
-from database.DB_Password import DATABASE_URL
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL, echo=False)
 
 def get_engine():
@@ -275,26 +279,76 @@ def update_speakers(event_id: int, speakers: str) -> None:
 
 
 # --- Delete ---
-
-def delete_event(event_id: int):
+def delete_event(event_id: int) -> bool:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
-        if not event: return False
+        if not event:
+            return False
         session.delete(event)
         session.commit()
+        return True  # ✅ explicitly signal success
+
 
 #________________________________________________________________________________________________________________________________________________________
 # ------ User–Event linking functions ------
 
 def register_user_to_event(user_email: str, event_id: int):
+    """
+    Register a user to an event with an atomic seat decrement to avoid races.
+
+    Returns (success: bool, reason: Optional[str]) where reason in
+    {'full','already_registered','not_found'} on failure.
+    """
     with Session(get_engine()) as session:
+        # Validate user and event exist first
         user = session.get(Users, user_email)
+        if not user:
+            return (False, 'not_found')
         event = session.get(Events, event_id)
-        if user and event:
-            if event not in user.events:
-                user.events.append(event)
-                session.add(user)
+        if not event:
+            return (False, 'not_found')
+
+        # Already registered? quick check via relationship (works fine here)
+        if event in user.events:
+            return (False, 'already_registered')
+
+        # Initialize available_seats from capacity when missing
+        if event.available_seats is None:
+            if event.capacity is not None:
+                event.available_seats = event.capacity
+                session.add(event)
                 session.commit()
+            else:
+                return (False, 'full')
+
+        # Atomic decrement: only decrement when seats > 0
+        stmt = (
+            update(Events)
+            .where(Events.id == event_id, Events.available_seats > 0)
+            .values(available_seats=Events.available_seats - 1)
+        )
+        res = session.exec(stmt)
+        # SQLModel's exec returns a Result; use rowcount when available
+        try:
+            affected = res.rowcount  # type: ignore[attr-defined]
+        except Exception:
+            # Fallback: treat as no rows when API doesn't expose rowcount
+            affected = 0
+        if not affected:
+            # No seat to take
+            return (False, 'full')
+
+        # Link user to event in same transaction
+        # Re-fetch event to ensure the instance is attached/updated
+        event = session.get(Events, event_id)
+        if event in user.events:
+            # If link appeared concurrently, nothing to do; keep seat taken
+            session.commit()
+            return (False, 'already_registered')
+        user.events.append(event)
+        session.add(user)
+        session.commit()
+        return (True, None)
 
 def unregister_user_from_event(user_email: str, event_id: int):
     with Session(get_engine()) as session:
@@ -302,15 +356,54 @@ def unregister_user_from_event(user_email: str, event_id: int):
         event = session.get(Events, event_id)
         if user and event and event in user.events:
             user.events.remove(event)
+            event.available_seats += 1
             session.add(user)
+            session.add(event)
             session.commit()
+            return True
+        return False
+def get_user_events(user_email: str, search: Optional[str] = None) -> list[int]:
+    """Return a list of event dicts the given user is registered for.
 
-def get_user_events(user_email: str) -> list[int]:
+    If `search` is provided, filter by title/location/description (case-insensitive substring).
+    """
     with Session(get_engine()) as session:
         user = session.get(Users, user_email)
         if not user:
             return []
-        return [event.id for event in user.events]
+        # If no search, return all
+        if not search:
+            return [
+                {
+                    "id": event.id,
+                    "title": event.title,
+                    "description": event.description,
+                    "date": event.date,
+                    "location": event.location,
+                    "capacity": event.capacity,
+                    "available_seats": event.available_seats,
+                    "organizers": getattr(event, "organizers", []) or [],
+                    "speakers": getattr(event, "speakers", []) or [],
+                }
+                for event in user.events
+            ]
+
+        q = search.lower().strip()
+        out = []
+        for event in user.events:
+            title = (event.title or "").lower()
+            desc = (event.description or "").lower()
+            loc = (event.location or "").lower()
+            if q in title or q in desc or q in loc:
+                out.append({
+                    "id": event.id,
+                    "title": event.title,
+                    "description": event.description,
+                    "date": event.date,
+                    "location": event.location,
+                    "available_seats": event.available_seats,
+                })
+        return out
 
 def get_event_users(event_id: int) -> list[str]:
     with Session(get_engine()) as session:
@@ -337,6 +430,19 @@ def print_all_events():
             print(f"{event.id:<3} | {event.title:<50}")
 
 # List all events
-def list_events() -> List[Events]:
+def list_events(search: Optional[str] = None) -> List[Events]:
+    """Return events; if search provided, filter by title/location/description (case-insensitive).
+    Uses SQL-level filtering when possible.
+    """
     with Session(get_engine()) as session:
-        return session.exec(select(Events)).all()
+        if not search:
+            return session.exec(select(Events)).all()
+        pattern = f"%{search}%"
+        stmt = select(Events).where(
+            or_(
+                Events.title.ilike(pattern),
+                Events.description.ilike(pattern),
+                Events.location.ilike(pattern),
+            )
+        )
+        return session.exec(stmt).all()

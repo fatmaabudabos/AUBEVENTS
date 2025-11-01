@@ -3,7 +3,7 @@
 
 from sqlmodel import SQLModel
 from database.database import get_engine
-import tables
+import database.tables
 
 #SQLModel.metadata.drop_all(get_engine())
 SQLModel.metadata.create_all(get_engine())

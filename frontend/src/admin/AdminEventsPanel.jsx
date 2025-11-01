@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import "./AdminPanel.css";
 
 /**
  * AdminEventsPanel.jsx (frontend only)
@@ -88,18 +89,9 @@ function useToasts() {
 
 function Toasts({ items }) {
   return (
-    <div className="fixed top-4 right-4 z-50 grid gap-2">
+    <div className="toast-container">
       {items.map((t) => (
-        <div
-          key={t.id}
-          className={`rounded-2xl shadow-lg px-4 py-3 text-sm ${
-            t.variant === "success"
-              ? "bg-green-100 text-green-800 border border-green-300"
-              : t.variant === "error"
-              ? "bg-red-100 text-red-800 border border-red-300"
-              : "bg-slate-100 text-slate-800 border border-slate-300"
-          }`}
-        >
+        <div key={t.id} className={`toast toast-${t.variant}`}>
           {t.msg}
         </div>
       ))}
@@ -112,9 +104,9 @@ function Toasts({ items }) {
 // ----------------------
 function Labeled({ label, children, required }) {
   return (
-    <label className="grid gap-1">
-      <span className="text-sm font-semibold text-slate-700">
-        {label} {required && <span className="text-red-600">*</span>}
+    <label className="admin-label">
+      <span className="admin-label-text">
+        {label} {required && <span className="required">*</span>}
       </span>
       {children}
     </label>
@@ -125,10 +117,7 @@ function TextInput(props) {
   return (
     <input
       {...props}
-      className={
-        "w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-300 " +
-        (props.className || "")
-      }
+      className={`admin-input ${props.className || ""}`}
     />
   );
 }
@@ -137,23 +126,14 @@ function TextArea(props) {
   return (
     <textarea
       {...props}
-      className={
-        "w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-300 min-h-[88px] " +
-        (props.className || "")
-      }
+      className={`admin-input admin-textarea ${props.className || ""}`}
     />
   );
 }
 
 function Button({ variant = "primary", children, className = "", ...rest }) {
-  const base = "rounded-xl px-4 py-2 text-sm font-semibold shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
-  const map = {
-    primary: "bg-rose-700 text-white hover:bg-rose-800",
-    secondary: "bg-white text-slate-800 border border-slate-300 hover:bg-slate-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
-  };
   return (
-    <button className={`${base} ${map[variant]} ${className}`} {...rest}>
+    <button className={`btn btn-${variant} ${className}`} {...rest}>
       {children}
     </button>
   );
@@ -204,7 +184,7 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
     async function load() {
       if (mode !== "edit" || !eventId || initial) return;
       try {
-  const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
+        const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
         if (ignore) return;
         setField("title", data.title || "");
         setField("description", data.description || "");
@@ -244,9 +224,17 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
 
     try {
       if (mode === "create") {
-  const res = await apiJson(`/api/events`, { method: "POST", body: JSON.stringify(payload) });
+        const res = await apiJson(`/api/events`, { method: "POST", body: JSON.stringify(payload) });
         toast.success(res?.message || "Event created successfully");
         onCreated?.(res);
+        // Clear form fields after successful create
+        setField("title", "");
+        setField("description", "");
+        setField("time", "");
+        setField("location", "");
+        setField("capacity", "");
+        setField("organizers", "");
+        setField("speakers", "");
       } else {
         // For PATCH, send only changed fields
         const patch = {};
@@ -268,7 +256,7 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
           toast.info("No changes to save");
           return;
         }
-  const res = await apiJson(`/api/events/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) });
+        const res = await apiJson(`/api/events/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) });
         toast.success(res?.message || "Event updated successfully");
         onUpdated?.(res);
       }
@@ -278,8 +266,8 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
   };
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <form onSubmit={onSubmit} className="event-form">
+      <div className="form-grid">
         <Labeled label="Title" required>
           <TextInput
             placeholder="e.g., AUB Career Fair 2025"
@@ -334,13 +322,13 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
         />
       </Labeled>
 
-      <div className="flex items-center gap-2">
+      <div className="form-actions">
         <Button type="submit" variant="primary">
-          {mode === "create" ? "Create event" : "Save changes"}
+          {mode === "create" ? "🎉 Create Event" : "💾 Save Changes"}
         </Button>
         {onCancel && (
           <Button type="button" variant="secondary" onClick={onCancel}>
-            Cancel
+            ❌ Cancel
           </Button>
         )}
       </div>
@@ -354,11 +342,11 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
 function Confirm({ open, title, description, onConfirm, onCancel }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
-      <div className="w-[92vw] max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
-        <div className="mt-4 flex justify-end gap-2">
+    <div className="modal-overlay">
+      <div className="modal-card">
+        <h3 className="modal-title">{title}</h3>
+        <p className="modal-desc">{description}</p>
+        <div className="modal-actions">
           <Button variant="secondary" onClick={onCancel}>Cancel</Button>
           <Button variant="danger" onClick={onConfirm}>Delete</Button>
         </div>
@@ -424,7 +412,7 @@ export default function AdminEventsPanel() {
   const doDelete = async () => {
     try {
       if (!editId) return;
-  await apiJson(`/api/events/${editId}`, { method: "DELETE" });
+      await apiJson(`/api/events/${editId}`, { method: "DELETE" });
       toast.success("Event deleted successfully");
       setLocalEvents((evs) => evs.filter((e) => String(e.id) !== String(editId)));
       setShowConfirm(false);
@@ -448,51 +436,66 @@ export default function AdminEventsPanel() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Top bar */}
-      <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-2xl bg-rose-700 text-white grid place-items-center font-bold">A</div>
-            <div className="font-semibold">AUB Events – Admin</div>
+    <div className="admin-theme">
+      {/* Header */}
+      <div className="admin-header">
+        <div className="admin-header-inner">
+          <div className="brand">
+            <div className="brand-logo">A</div>
+            <div className="brand-title">AUB EVENTS</div>
+            <div className="admin-badge">Admin Panel</div>
           </div>
-          <div className="flex items-center gap-2 text-sm">
+          <div className="header-actions">
             <Button variant={activeTab === "admin" ? "primary" : "secondary"} onClick={() => setActiveTab("admin")}>
-              Admin Area
+              📋 Admin Area
             </Button>
             <Button variant={activeTab === "user" ? "primary" : "secondary"} onClick={() => setActiveTab("user")}>
-              Switch to User
+              👤 Student View
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="admin-container">
         {activeTab === "user" ? (
-          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-            <h2 className="text-lg font-semibold">Welcome to user part</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              This is a placeholder. In the next phase, admins will also browse events here as regular users.
+          <div className="admin-card">
+            <h2 className="section-title">🎓 Student Dashboard</h2>
+            <p className="section-sub">
+              Welcome to the student view! Here you can browse and register for exciting AUB events.
             </p>
+            <div className="student-preview">
+              <div className="preview-card">
+                <h3>📅 Upcoming Events</h3>
+                <p>Discover amazing events happening on campus</p>
+              </div>
+              <div className="preview-card">
+                <h3>🎫 My Registrations</h3>
+                <p>Track your registered events and attendance</p>
+              </div>
+              <div className="preview-card">
+                <h3>🏆 Campus Life</h3>
+                <p>Connect with fellow students and join activities</p>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left column: create/edit form */}
-            <div className="lg:col-span-2 rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">
-                  {mode === "create" ? "Create a new event" : `Edit event #${editId}`}
+          <div className="admin-grid">
+            {/* Main form */}
+            <div className="admin-card">
+              <div className="card-top">
+                <h2 className="section-title">
+                  {mode === "create" ? "🎉 Create New Event" : `✏️ Edit Event #${editId}`}
                 </h2>
                 {mode === "edit" && (
-                  <div className="flex items-center gap-2">
+                  <div className="card-actions">
                     <Button variant="secondary" onClick={() => { setMode("create"); setEditId(""); }}>
-                      New
+                      ➕ New Event
                     </Button>
-                    <Button variant="danger" onClick={() => setShowConfirm(true)}>Delete</Button>
+                    <Button variant="danger" onClick={() => setShowConfirm(true)}>🗑️ Delete</Button>
                   </div>
                 )}
               </div>
-              <div className="mt-4">
+              <div className="card-body">
                 <EventForm
                   mode={mode}
                   eventId={editId}
@@ -504,73 +507,73 @@ export default function AdminEventsPanel() {
               </div>
             </div>
 
-            {/* Right column: quick tools and local cache */}
-            <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-              <h3 className="text-base font-semibold">Quick tools</h3>
-              <div className="mt-3 grid gap-2">
-                <div className="grid grid-cols-[1fr_auto] gap-2">
+            {/* Tools sidebar */}
+            <div className="admin-card">
+              <h3 className="section-title">🔧 Quick Tools</h3>
+              <div className="tools">
+                <div className="tools-row">
                   <TextInput
-                    placeholder="Event ID"
+                    placeholder="Enter Event ID"
                     value={editId}
                     onChange={(e) => setEditId(e.target.value)}
                   />
-                  <Button variant="secondary" onClick={loadForEdit}>Load</Button>
+                  <Button variant="secondary" onClick={loadForEdit}>📂 Load</Button>
                 </div>
-                <p className="text-xs text-slate-600">
-                  Enter an event ID and click Load to edit it. The form will fetch current data using
-                  <code className="ml-1 rounded bg-slate-100 px-1">GET /api/events/:id</code>.
+                <p className="muted">
+                  Enter an event ID to edit existing events
+                  <span className="code">GET /api/events/:id</span>
                 </p>
-                <div className="mt-4 flex items-center gap-2">
+                <div className="tools-actions">
                   <Button variant="secondary" onClick={async () => {
                     try {
                       const res = await apiJson(`/api/events`, { method: "GET" });
                       setServerEvents(res?.events || []);
-                      toast.success(`Loaded ${res?.events?.length ?? 0} events from server`);
+                      toast.success(`📊 Loaded ${res?.events?.length ?? 0} events from server`);
                     } catch (e) {
                       toast.error(e.message || "Failed to load events");
                     }
-                  }}>Refresh server events</Button>
+                  }}>🔄 Refresh Events</Button>
                 </div>
               </div>
 
-              <div className="mt-6">
-                <h4 className="text-sm font-semibold text-slate-700">Session events (local cache)</h4>
-                <p className="text-xs text-slate-600">Recently created/edited events this session.</p>
-                <div className="mt-3 grid gap-2">
+              <div className="server-list">
+                <h4 className="subhead">📝 Recent Events</h4>
+                <p className="muted">Events created/edited this session</p>
+                <div className="list">
                   {localEvents.length === 0 ? (
-                    <div className="text-xs text-slate-500">No local events yet.</div>
+                    <div className="muted">No events created yet. Start by creating your first event! 🎉</div>
                   ) : (
-                    <ul className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+                    <ul className="list-items">
                       {localEvents.map((e) => (
-                        <li key={e.id} className="p-3 hover:bg-slate-50 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold">#{String(e.id)} – {e.title || "Untitled"}</div>
-                            <div className="text-xs text-slate-600">{e.location} • {fromApiTimeToLocal(e.time)}</div>
+                        <li key={e.id} className="list-item">
+                          <div className="list-item-main">
+                            <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
+                            <div className="item-sub">📍 {e.location} • 📅 {fromApiTimeToLocal(e.time)}</div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="secondary" onClick={() => { setEditId(String(e.id)); setMode("edit"); }}>Edit</Button>
+                          <div className="list-item-actions">
+                            <Button variant="secondary" onClick={() => { setEditId(String(e.id)); setMode("edit"); }}>✏️ Edit</Button>
                           </div>
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
-                <div className="mt-6">
-                  <h4 className="text-sm font-semibold text-slate-700">Server events</h4>
-                  <p className="text-xs text-slate-600">Fetched via GET /api/events</p>
-                  <div className="mt-3 grid gap-2">
+                <div className="server-list">
+                  <h4 className="subhead">🌐 All Events</h4>
+                  <p className="muted">Events from server database</p>
+                  <div className="list">
                     {serverEvents.length === 0 ? (
-                      <div className="text-xs text-slate-500">No events fetched yet.</div>
+                      <div className="muted">Click "🔄 Refresh Events" to load from server</div>
                     ) : (
-                      <ul className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+                      <ul className="list-items">
                         {serverEvents.map((e) => (
-                          <li key={e.id} className="p-3 hover:bg-slate-50 flex items-center justify-between">
-                            <div>
-                              <div className="text-sm font-semibold">#{String(e.id)} – {e.title || "Untitled"}</div>
-                              <div className="text-xs text-slate-600">{e.location} • {fromApiTimeToLocal(e.time)}</div>
+                          <li key={e.id} className="list-item">
+                            <div className="list-item-main">
+                              <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
+                              <div className="item-sub">📍 {e.location} • 📅 {fromApiTimeToLocal(e.time)}</div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button variant="secondary" onClick={() => { setEditId(String(e.id)); setMode("edit"); }}>Edit</Button>
+                            <div className="list-item-actions">
+                              <Button variant="secondary" onClick={() => { setEditId(String(e.id)); setMode("edit"); }}>✏️ Edit</Button>
                             </div>
                           </li>
                         ))}
