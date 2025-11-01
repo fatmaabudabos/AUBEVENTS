@@ -404,6 +404,9 @@ export default function AdminEventsPanel() {
         copy[idx] = { id, ...fresh };
         return copy;
       });
+      // After saving changes in edit mode, return to create mode with an empty form
+      setMode("create");
+      setEditId("");
     } catch {
       // Fallback: leave local as-is
     }
@@ -445,7 +448,7 @@ export default function AdminEventsPanel() {
             <div className="brand-title">AUB EVENTS</div>
             <div className="admin-badge">Admin Panel</div>
           </div>
-          <div className="header-actions">
+           <div className="header-actions">
             <Button variant={activeTab === "admin" ? "primary" : "secondary"} onClick={() => setActiveTab("admin")}>
               📋 Admin Area
             </Button>
@@ -497,6 +500,7 @@ export default function AdminEventsPanel() {
               </div>
               <div className="card-body">
                 <EventForm
+                  key={`${mode}-${editId || 'new'}`}
                   mode={mode}
                   eventId={editId}
                   onCreated={handleCreated}
