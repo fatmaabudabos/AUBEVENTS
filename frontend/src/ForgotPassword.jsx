@@ -1,6 +1,4 @@
-
 import React, { useState } from "react";
-import { useNavigate } from 'react-router-dom';
 import "./Auth.css";
 import { api } from './api';
 
@@ -8,7 +6,6 @@ export default function ForgotPassword({ onSwitchLogin }) {
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
-  const navigate = useNavigate();
 
   const handleRequest = async (e) => {
     e.preventDefault();
@@ -18,7 +15,8 @@ export default function ForgotPassword({ onSwitchLogin }) {
         method: 'POST',
         body: { email },
       });
-      setStep(2);
+      window.location.href = "/reset";
+
     } catch (err) {
       setError(err.message);
     }
@@ -36,11 +34,11 @@ export default function ForgotPassword({ onSwitchLogin }) {
       ) : (
         <div>
           <p>We have sent a password reset link to your email. Please check your inbox and follow the link to reset your password.</p>
-          <a href="#" onClick={(e) => { e.preventDefault(); onSwitchLogin ? onSwitchLogin() : navigate('/login'); }}>Back to Login</a>
+          <a href="/login">Back to Login</a>
         </div>
       )}
       <p>
-        Remembered? <button className="link" onClick={() => onSwitchLogin ? onSwitchLogin() : navigate('/login')}>Back to Login</button>
+        Remembered? <button className="link" onClick={onSwitchLogin}>Back to Login</button>
       </p>
     </div>
   );
