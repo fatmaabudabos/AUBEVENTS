@@ -1,9 +1,8 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from backend import events_views
 from django.http import JsonResponse
 from django.views.generic import TemplateView
-from django.urls import re_path
 
 def root_index(_request):
     """Simple root endpoint to help discover APIs."""
@@ -14,7 +13,6 @@ def root_index(_request):
     })
 
 urlpatterns = [
-    path('', root_index, name='api_root'),
     path('admin/', admin.site.urls),
     path('auth/', include('accounts.urls')),
     # Events API
@@ -23,8 +21,10 @@ urlpatterns = [
     path('api/events/register', events_views.events_register, name='events_register'),
     path('api/events/unregister', events_views.events_unregister, name='events_unregister'),
     path('api/my/events', events_views.my_events, name='my_events'),
-]
 
-urlpatterns += [
+    # Optional API root
+    path('api/', root_index, name='api_root'),
+
+    # Catch-all for React frontend
     re_path(r'^.*$', TemplateView.as_view(template_name='index.html')),
 ]
