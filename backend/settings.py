@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 import dj_database_url
 import pymysql
+import tempfile
 
 pymysql.install_as_MySQLdb()
 
@@ -132,6 +133,13 @@ if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL)
     }
+    if os.environ.get("MYSQL_SSL_CA"):
+        ca_file = tempfile.NamedTemporaryFile(delete=False)
+        ca_file.write(os.environ["MYSQL_SSL_CA"].encode())
+        ca_file.flush()
+        DATABASES['default']['OPTIONS'] = {
+            'ssl': {'ca': ca_file.name}
+        }
 else:
     DATABASES = {
         'default': {
@@ -183,7 +191,6 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 STATIC_URL = '/static/'
-import os
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'frontend', 'dist'),
