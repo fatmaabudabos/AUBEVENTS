@@ -40,7 +40,6 @@ export default function ResetPassword() {
         body: { email, reset_code: code, new_password: password },
       });
       setStep(3);
-      setMessage("Password reset successful! You can now log in.");
     } catch (err) {
       setMessage(err.message || "Request failed");
     }
