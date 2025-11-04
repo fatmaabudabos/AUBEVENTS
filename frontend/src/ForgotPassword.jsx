@@ -93,7 +93,6 @@ export default function ForgotPassword({ onSwitchLogin }) {
 
       {/* Flash messages */}
       {error && <div className="flash err">{error}</div>}
-      {message && !error && <div className="flash ok">{message}</div>}
 
       {step !== 3 && (
         <p>
