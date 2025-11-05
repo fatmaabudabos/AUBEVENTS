@@ -2,6 +2,11 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import dj_database_url
+import pymysql
+import tempfile
+
+pymysql.install_as_MySQLdb()
 
 # Load environment variables from .env file (see .env for required keys)
 load_dotenv()
@@ -19,7 +24,7 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 # Allow dynamic override from .env
 _env_hosts = os.getenv("ALLOWED_HOSTS")
 if _env_hosts:
@@ -113,6 +118,7 @@ TEMPLATES = [
         },
     },
 ]
+TEMPLATES[0]['DIRS'] = [os.path.join(BASE_DIR, 'frontend', 'dist')]
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
@@ -120,12 +126,27 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Database (uses MySQL from .env if available)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL)
     }
-}
+    if os.environ.get("MYSQL_SSL_CA"):
+        ca_file = tempfile.NamedTemporaryFile(delete=False)
+        ca_file.write(os.environ["MYSQL_SSL_CA"].encode())
+        ca_file.flush()
+        DATABASES['default']['OPTIONS'] = {
+            'ssl': {'ca': ca_file.name}
+        }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -168,3 +189,16 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+STATIC_URL = '/static/'
+
+STATICFILES_DIRS = [
+    BASE_DIR / 'frontend' / 'dist',
+]
+
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+
