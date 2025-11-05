@@ -133,12 +133,14 @@ if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL)
     }
-    if os.environ.get("MYSQL_SSL_CA"):
-        ca_file = tempfile.NamedTemporaryFile(delete=False)
-        ca_file.write(os.environ["MYSQL_SSL_CA"].encode())
-        ca_file.flush()
+    # Set MySQL engine to use PyMySQL
+    DATABASES['default']['ENGINE'] = 'django.db.backends.mysql'
+    
+    # Add SSL CA if file path is provided
+    ca_path = os.environ.get("MYSQL_SSL_CA_PATH")
+    if ca_path and os.path.exists(ca_path):
         DATABASES['default']['OPTIONS'] = {
-            'ssl': {'ca': ca_file.name}
+            'ssl': {'ca': ca_path}
         }
 else:
     DATABASES = {
@@ -183,13 +185,6 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
-
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
 STATIC_URL = '/static/'
 
 STATICFILES_DIRS = [
@@ -199,6 +194,11 @@ STATICFILES_DIRS = [
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Default primary key field type
+# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
 

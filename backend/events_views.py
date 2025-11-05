@@ -39,6 +39,18 @@ def _auth_from_request(request: HttpRequest):
     return get_user(email)
 
 
+def _emails_match(a: str | None, b: str | None) -> bool:
+    """Return True if two emails should be treated as the same admin.
+
+    - Case-insensitive.
+    """
+    if not a or not b:
+        return False
+    a = a.strip().lower()
+    b = b.strip().lower()
+    return a == b
+
+
 def _require_admin(request: HttpRequest):
     user = _auth_from_request(request)
     if not user or not getattr(user, "is_admin", False):
@@ -74,27 +86,62 @@ def _eventout_to_json(evt) -> Dict[str, Any]:
 @csrf_exempt
 def events_create(request: HttpRequest):
     if request.method == "GET":
-        # Public list of events
-        # Support optional search query param 'q' to filter by title/location/description
-        q = request.GET.get('q') or request.GET.get('search') or None
-        items = [
-            {
-                "id": e.id,
-                "title": e.title,
-                "description": getattr(e, "description", None),
-                "time": (getattr(e, "date", None) or datetime.utcnow()).isoformat(timespec="seconds") if getattr(e, "date", None) else None,
-                "location": getattr(e, "location", None),
-                "capacity": getattr(e, "capacity", None),
-                "available_seats": getattr(e, "available_seats", None),
-                "organizers": getattr(e, "organizers", []) or [],
-                "speakers": getattr(e, "speakers", []) or [],
-            }
-            for e in list_all_events(q)
-        ]
-        return JsonResponse({"events": items})
+        # Check if user is an admin - if so, show only their events
+        user = _auth_from_request(request)
+        if user and getattr(user, "is_admin", False):
+            # Admin user - show only events created by this admin
+            q = request.GET.get('q') or request.GET.get('search') or None
+            
+            # Get raw database rows and filter by created_by before converting to EventOut
+            from backend.crud import db_list_events
+            raw_events = db_list_events(q)
+            
+            # Filter events by creator
+            filtered_events = [
+                e for e in raw_events 
+                if _emails_match(getattr(e, "created_by", None), user.email)
+            ]
+            
+            # Convert filtered events to JSON response format
+            items = [
+                {
+                    "id": e.id,
+                    "title": e.title,
+                    "description": getattr(e, "description", None),
+                    "time": (getattr(e, "date", None) or datetime.utcnow()).isoformat(timespec="seconds") if getattr(e, "date", None) else None,
+                    "location": getattr(e, "location", None),
+                    "capacity": getattr(e, "capacity", None),
+                    "available_seats": getattr(e, "available_seats", None),
+                    "organizers": getattr(e, "organizers", []) or [],
+                    "speakers": getattr(e, "speakers", []) or [],
+                }
+                for e in filtered_events
+            ]
+            return JsonResponse({"events": items})
+        else:
+            # Public list of events (for regular users and non-authenticated)
+            # Support optional search query param 'q' to filter by title/location/description
+            q = request.GET.get('q') or request.GET.get('search') or None
+            items = [
+                {
+                    "id": e.id,
+                    "title": e.title,
+                    "description": getattr(e, "description", None),
+                    "time": (getattr(e, "date", None) or datetime.utcnow()).isoformat(timespec="seconds") if getattr(e, "date", None) else None,
+                    "location": getattr(e, "location", None),
+                    "capacity": getattr(e, "capacity", None),
+                    "available_seats": getattr(e, "available_seats", None),
+                    "organizers": getattr(e, "organizers", []) or [],
+                    "speakers": getattr(e, "speakers", []) or [],
+                }
+                for e in list_all_events(q)
+            ]
+            return JsonResponse({"events": items})
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    if not _require_admin(request):
+    
+    admin_user = _require_admin(request)
+    if not admin_user:
         return JsonResponse({"error": "Admin privileges required"}, status=403)
 
     data = _parse_json(request)
@@ -117,7 +164,7 @@ def events_create(request: HttpRequest):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-    evt = create_event(evt_in)
+    evt = create_event(evt_in, created_by=admin_user.email)
     out = _eventout_to_json(get_event(evt.id))
     return JsonResponse({"message": "Event created", **(out or {})}, status=201)
 
@@ -133,8 +180,27 @@ def events_detail(request: HttpRequest, event_id: int):
         return JsonResponse(_eventout_to_json(evt))
 
     if method == "PATCH":
-        if not _require_admin(request):
+        admin_user = _require_admin(request)
+        if not admin_user:
             return JsonResponse({"error": "Admin privileges required"}, status=403)
+        
+        # Check if the admin is the creator of this event
+        evt = get_event(event_id)
+        if not evt:
+            return JsonResponse({"error": "Not found"}, status=404)
+        
+        # Get the event from database to check created_by field
+        from database.database import get_engine
+        from sqlmodel import Session, select
+        from database.tables import Events
+        
+        with Session(get_engine()) as session:
+            db_event = session.get(Events, event_id)
+            if not db_event:
+                return JsonResponse({"error": "Not found"}, status=404)
+            if not _emails_match(db_event.created_by, admin_user.email):
+                return JsonResponse({"error": "You can only edit events you created"}, status=403)
+        
         data = _parse_json(request)
         # Map 'time' -> 'date' if present
         if "time" in data and data.get("time"):
@@ -153,8 +219,22 @@ def events_detail(request: HttpRequest, event_id: int):
         return JsonResponse({"message": "Event updated", **(out or {})})
 
     if method == "DELETE":
-        if not _require_admin(request):
+        admin_user = _require_admin(request)
+        if not admin_user:
             return JsonResponse({"error": "Admin privileges required"}, status=403)
+        
+        # Check if the admin is the creator of this event
+        from database.database import get_engine
+        from sqlmodel import Session, select
+        from database.tables import Events
+        
+        with Session(get_engine()) as session:
+            db_event = session.get(Events, event_id)
+            if not db_event:
+                return JsonResponse({"error": "Not found"}, status=404)
+            if not _emails_match(db_event.created_by, admin_user.email):
+                return JsonResponse({"error": "You can only delete events you created"}, status=403)
+        
         ok = delete_event_by_id(event_id)
         if not ok:
             return JsonResponse({"error": "Not found"}, status=404)
