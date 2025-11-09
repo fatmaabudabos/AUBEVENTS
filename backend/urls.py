@@ -31,6 +31,7 @@ urlpatterns = [
 
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
+# Catch-all for React routing - must exclude all Django routes
 urlpatterns += [
-    re_path(r'^(?!static/|assets/).*$', TemplateView.as_view(template_name='index.html')),
+    re_path(r'^(?!api/|admin/|auth/|static/).*$', TemplateView.as_view(template_name='index.html')),
 ]

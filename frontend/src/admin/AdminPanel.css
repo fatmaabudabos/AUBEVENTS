@@ -343,6 +343,19 @@
   gap: 0.5rem;
 }
 
+/* Show More Section */
+.show-more-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-gray);
+  text-align: center;
+}
+
+.show-more-btn {
+  font-size: 0.9rem;
+  padding: 0.75rem 1.5rem;
+}
+
 /* Student Preview Cards */
 .student-preview {
   display: grid;
@@ -460,25 +473,25 @@
     gap: 1rem;
     text-align: center;
   }
-  
+
   .brand {
     justify-content: center;
   }
-  
+
   .card-top {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
   }
-  
+
   .form-actions {
     flex-direction: column;
   }
-  
+
   .tools-row {
     grid-template-columns: 1fr;
   }
-  
+
   .list-item {
     flex-direction: column;
     align-items: flex-start;

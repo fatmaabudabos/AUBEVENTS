@@ -4,13 +4,14 @@ import { api } from './api';
 import './Dashboard.css';
 
 function Dashboard() {
-  const [user, setUser] = useState({ name: 'User', email: '' });
+  const [user, setUser] = useState({ name: 'User', email: '', isAdmin: false });
   const [events, setEvents] = useState([]);
   const [myEventIds, setMyEventIds] = useState(new Set());
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [showAllEvents, setShowAllEvents] = useState(false); // Show/hide all events
 
   useEffect(() => {
     let cancelled = false;
@@ -20,13 +21,21 @@ function Dashboard() {
         // Load user profile
         try {
           const me = await api('/auth/me/', { auth: true });
-          if (!cancelled) setUser({ name: me.name || me.email.split('@')[0], email: me.email });
+          if (!cancelled) setUser({
+            name: me.name || me.email.split('@')[0],
+            email: me.email,
+            isAdmin: me.is_admin || me.isAdmin || false
+          });
         } catch {
           const cached = localStorage.getItem('user');
           if (cached && !cancelled) {
             const u = JSON.parse(cached);
             const display = u.name || (u.email ? u.email.split('@')[0] : 'User');
-            setUser({ name: display, email: u.email || '' });
+            setUser({
+              name: display,
+              email: u.email || '',
+              isAdmin: u.is_admin || u.isAdmin || false
+            });
           }
         }
 
@@ -58,6 +67,8 @@ function Dashboard() {
     const timer = setTimeout(async () => {
       try {
         setLoading(true);
+        // Reset show more state when search/tab changes
+        setShowAllEvents(false);
         const q = (query || '').trim();
         let path = activeTab === 'all' ? '/api/events' : '/api/my/events';
         if (q) path += `?q=${encodeURIComponent(q)}`;
@@ -174,10 +185,17 @@ function Dashboard() {
               <p className="user-email">{user.email}</p>
             </div>
           </div>
-          <button className="logout-btn" onClick={onLogout}>
-            <LogOut size={18} />
-            Log out
-          </button>
+          <div className="header-actions">
+            {user.isAdmin && (
+              <button className="btn btn-secondary" onClick={() => window.location.href = '/admin'}>
+                📋 Admin Area
+              </button>
+            )}
+            <button className="logout-btn" onClick={onLogout}>
+              <LogOut size={18} />
+              Log out
+            </button>
+          </div>
         </div>
       </div>
 
@@ -242,76 +260,89 @@ function Dashboard() {
                   }
                 </div>
               ) : (
-                filtered.map(evt => (
-                  <div key={evt.id} className={`event-card ${myEventIds.has(evt.id) ? 'registered' : ''}`}>
-                    <div className="event-header">
-                      <h3>{evt.title}</h3>
-                      {myEventIds.has(evt.id) && <CheckCircle className="registered-badge" size={20} />}
-                    </div>
+                <>
+                  {(showAllEvents ? filtered : filtered.slice(0, 6)).map(evt => (
+                    <div key={evt.id} className={`event-card ${myEventIds.has(evt.id) ? 'registered' : ''}`}>
+                      <div className="event-header">
+                        <h3>{evt.title}</h3>
+                        {myEventIds.has(evt.id) && <CheckCircle className="registered-badge" size={20} />}
+                      </div>
 
-                    {evt.description && (
-                      <p className="event-description">{evt.description}</p>
-                    )}
+                      {evt.description && (
+                        <p className="event-description">{evt.description}</p>
+                      )}
 
-                    <div className="event-details">
-                      {evt.time && (
-                        <div className="detail">
-                          <Clock size={16} />
-                          <span>{formatDate(evt.time)}</span>
-                        </div>
-                      )}
-                      {evt.location && (
-                        <div className="detail">
-                          <MapPin size={16} />
-                          <span>{evt.location}</span>
-                        </div>
-                      )}
-                      {typeof evt.capacity === 'number' && (
-                        <div className="detail">
-                          <Users size={16} />
-                          <span>
-                            Capacity: {evt.capacity}
-                            {typeof evt.available_seats === 'number' && (
-                              <>
-                                <span> · </span>
-                                {evt.available_seats <= 0 ? (
-                                  <strong>Full</strong>
-                                ) : (
-                                  <strong>Available: {evt.available_seats}</strong>
-                                )}
-                              </>
-                            )}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                      <div className="event-details">
+                        {evt.time && (
+                          <div className="detail">
+                            <Clock size={16} />
+                            <span>{formatDate(evt.time)}</span>
+                          </div>
+                        )}
+                        {evt.location && (
+                          <div className="detail">
+                            <MapPin size={16} />
+                            <span>{evt.location}</span>
+                          </div>
+                        )}
+                        {typeof evt.capacity === 'number' && (
+                          <div className="detail">
+                            <Users size={16} />
+                            <span>
+                              Capacity: {evt.capacity}
+                              {typeof evt.available_seats === 'number' && (
+                                <>
+                                  <span> · </span>
+                                  {evt.available_seats <= 0 ? (
+                                    <strong>Full</strong>
+                                  ) : (
+                                    <strong>Available: {evt.available_seats}</strong>
+                                  )}
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
 
-                    <div className="event-actions">
-                      {myEventIds.has(evt.id) ? (
-                        <button
-                          onClick={() => unregister(evt.id)}
-                          className="btn btn-secondary"
-                        >
-                          Unregister
-                        </button>
-                      ) : (
-                        (() => {
-                          const isFull = typeof evt.available_seats === 'number' && evt.available_seats <= 0;
-                          return (
-                            <button
-                              onClick={() => register(evt.id)}
-                              className={`btn ${isFull ? 'btn-disabled' : 'btn-primary'}`}
-                              disabled={isFull}
-                              title={isFull ? 'Event is full' : 'Register'}
-                            >
-                              {isFull ? 'Full' : (<><Plus size={16} /> Register</>)}
-                            </button>
-                          );
-                        })()
-                      )}
+                      <div className="event-actions">
+                        {myEventIds.has(evt.id) ? (
+                          <button
+                            onClick={() => unregister(evt.id)}
+                            className="btn btn-secondary"
+                          >
+                            Unregister
+                          </button>
+                        ) : (
+                          (() => {
+                            const isFull = typeof evt.available_seats === 'number' && evt.available_seats <= 0;
+                            return (
+                              <button
+                                onClick={() => register(evt.id)}
+                                className={`btn ${isFull ? 'btn-disabled' : 'btn-primary'}`}
+                                disabled={isFull}
+                                title={isFull ? 'Event is full' : 'Register'}
+                              >
+                                {isFull ? 'Full' : (<><Plus size={16} /> Register</>)}
+                              </button>
+                            );
+                          })()
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+
+                  {filtered.length > 6 && (
+                    <div className="show-more-section">
+                      <button
+                        className="btn btn-secondary show-more-btn"
+                        onClick={() => setShowAllEvents(!showAllEvents)}
+                      >
+                        {showAllEvents ? '📈 Show Less' : `📋 Show More (${filtered.length - 6} more)`}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

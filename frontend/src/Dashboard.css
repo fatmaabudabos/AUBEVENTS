@@ -51,6 +51,31 @@
   font-size: 14px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.admin-btn:hover {
+  background: #218838;
+  transform: translateY(-1px);
+}
+
 .logout-btn {
   background: #dc3545;
   color: white;
@@ -202,6 +227,21 @@
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
   gap: 24px;
   padding: 0 32px 32px 32px;
+}
+
+.show-more-section {
+  grid-column: 1 / -1;
+  /* Span full width */
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+  padding-top: 20px;
+  border-top: 1px solid #e1e5e9;
+}
+
+.show-more-btn {
+  font-size: 14px;
+  padding: 12px 24px;
 }
 
 .event-card {

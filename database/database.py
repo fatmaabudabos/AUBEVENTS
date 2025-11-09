@@ -141,7 +141,8 @@ def create_event(
     date: Optional[datetime] = None,
     location: Optional[str] = None,
     capacity: Optional[int] = None,
-    available_seats: Optional[int] = None
+    available_seats: Optional[int] = None,
+    created_by: Optional[str] = None
 ) -> Events:
     
     event = Events(
@@ -150,7 +151,8 @@ def create_event(
         date=date,
         location=location,
         capacity=capacity,
-        available_seats=available_seats
+        available_seats=available_seats,
+        created_by=created_by
     )
 
     with Session(get_engine()) as session:

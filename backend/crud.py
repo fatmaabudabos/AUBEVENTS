@@ -54,6 +54,7 @@ def _row_to_eventout(r: Any) -> EventOut:
     """
     Convert a DB row/object (with dot attributes) into EventOut.
     Safely handles optional attributes (organizers/speakers may be None).
+    Note: created_by is not included in EventOut as it's for internal use only.
     """
     return EventOut(
         id=r.id,
@@ -71,7 +72,7 @@ def _row_to_eventout(r: Any) -> EventOut:
 # ------------------------
 # Create
 # ------------------------
-def create_event(event_in: EventCreate) -> Events:
+def create_event(event_in: EventCreate, created_by: Optional[str] = None) -> Events:
     """
     Create a new event in the DB.
     Sets available_seats = capacity initially.
@@ -83,6 +84,7 @@ def create_event(event_in: EventCreate) -> Events:
         location=event_in.location,
         capacity=event_in.capacity,
         available_seats=event_in.capacity,  # initially full capacity
+        created_by=created_by,
     )
     # organizers & speakers (lists) handled if DB supports JSON/text arrays
     if event_in.organizers:
