@@ -175,19 +175,57 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
     capacity: "",
     organizers: "",
     speakers: "",
+    category: "",
+    image_url: "",
   }), []);
   const stableInitial = initial ?? defaultInitial;
+  const initialImageUrl = stableInitial.image_url || "";
 
   const { values, setField, resetToInitial, dirtyPatch } = useDirtyTracker(stableInitial);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRetryModal, setShowRetryModal] = useState(false);
   const [lastError, setLastError] = useState("");
+  const [imagePreview, setImagePreview] = useState(initialImageUrl);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    setImagePreview(initialImageUrl);
+  }, [initialImageUrl]);
 
   // Check if form has any content
   const hasContent = useMemo(() => {
-    return Object.values(values).some(value => String(value).trim() !== "");
+    return Object.values(values).some(value => {
+      if (value === null || value === undefined) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      return String(value).trim() !== "";
+    });
   }, [values]);
 
+
+  const triggerFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api(`/api/events/upload-image`, { method: "POST", body: formData, auth: true });
+      const url = res?.image_url || "";
+      setField("image_url", url);
+      setImagePreview(url);
+      toast.success("Image uploaded successfully");
+    } catch (err) {
+      toast.error(err.message || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   // Automatic loading disabled - data is passed via initial prop when Load button is pressed
   // This prevents unwanted API calls when editId changes in the input field
@@ -197,12 +235,33 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
     // Validate
     if (!values.title.trim()) return toast.error("Title is required");
     if (!values.time || !isIsoLike(values.time)) return toast.error("Time must be set (YYYY-MM-DDTHH:MM)");
+
+    // Validate year is 2025 or 2026
+    const year = parseInt(values.time.substring(0, 4));
+    if (year !== 2025 && year !== 2026) {
+      return toast.error("Event year must be 2025 or 2026");
+    }
+
+    // Validate event is not in the past
+    const eventDate = new Date(values.time);
+    const now = new Date();
+    if (eventDate < now) {
+      return toast.error("Cannot create an event in the past");
+    }
+
     const cap = parseCapacity(values.capacity);
     if (Number.isNaN(cap)) return toast.error("Capacity must be a non-negative integer");
 
     setIsSubmitting(true);
 
     // Prepare payload
+    const normalizedImageUrl = (typeof values.image_url === "string" ? values.image_url : values.image_url ?? "").trim();
+    if (!normalizedImageUrl) {
+      setIsSubmitting(false);
+      toast.error("Event image is required");
+      return;
+    }
+
     const payload = {
       title: values.title.trim(),
       description: values.description.trim(),
@@ -211,6 +270,8 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
       capacity: cap === "" ? 0 : cap,
       organizers: toArray(values.organizers),
       speakers: toArray(values.speakers),
+      category: values.category?.trim() || null,
+      image_url: normalizedImageUrl,
     };
 
     try {
@@ -234,6 +295,16 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
         }
         if (diff.organizers !== undefined) patch.organizers = toArray(diff.organizers);
         if (diff.speakers !== undefined) patch.speakers = toArray(diff.speakers);
+        if (diff.category !== undefined) patch.category = diff.category?.trim() || null;
+        if (diff.image_url !== undefined) {
+          const diffUrl = (typeof diff.image_url === "string" ? diff.image_url : diff.image_url ?? "").trim();
+          if (!diffUrl) {
+            setIsSubmitting(false);
+            toast.error("Event image is required");
+            return;
+          }
+          patch.image_url = diffUrl;
+        }
 
         if (!Object.keys(patch).length) {
           setIsSubmitting(false);
@@ -266,6 +337,8 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
           <TextInput
             type="datetime-local"
             value={values.time}
+            min="2025-01-01T00:00"
+            max="2026-12-31T23:59"
             onChange={(e) => setField("time", e.target.value)}
           />
         </Labeled>
@@ -286,7 +359,53 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
             onChange={(e) => setField("capacity", e.target.value)}
           />
         </Labeled>
+        <Labeled label="Category">
+          <select
+            className="admin-select"
+            value={values.category}
+            onChange={(e) => setField("category", e.target.value)}
+          >
+            <option value="">-- Select Category (Optional) --</option>
+            <option value="Workshop">Workshop</option>
+            <option value="Concert">Concert</option>
+            <option value="Lecture">Lecture</option>
+            <option value="Sports">Sports</option>
+            <option value="Social">Social</option>
+            <option value="Career">Career</option>
+          </select>
+        </Labeled>
       </div>
+      <Labeled label="Event Image">
+        <div className="image-upload">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="image-file-input"
+            onChange={handleFileChange}
+            hidden
+          />
+          {imagePreview ? (
+            <div className="image-preview">
+              <img src={imagePreview} alt="Selected event" />
+            </div>
+          ) : (
+            <div className="image-placeholder">
+              Upload an image (JPG, PNG, GIF, WEBP) before saving.
+            </div>
+          )}
+          <div className="image-actions">
+            <Button type="button" variant="secondary" onClick={triggerFilePicker} disabled={uploadingImage}>
+              {uploadingImage ? "Uploading..." : imagePreview ? "Replace Image" : "Upload Image"}
+            </Button>
+            {values.image_url && (
+              <a href={values.image_url} className="btn btn-secondary" target="_blank" rel="noopener noreferrer">
+                View Image
+              </a>
+            )}
+          </div>
+        </div>
+      </Labeled>
       <Labeled label="Organizers (comma-separated)">
         <TextInput
           placeholder="e.g., CCECS, AUB Alumni Club"
@@ -393,25 +512,48 @@ export default function AdminEventsPanel() {
   const [formResetKey, setFormResetKey] = useState(0); // Force form remount
   const [loadedEvent, setLoadedEvent] = useState(null); // Event data loaded via Load button
   const [showAllServerEvents, setShowAllServerEvents] = useState(false); // Show/hide all server events
+  const [showAllPastEvents, setShowAllPastEvents] = useState(false); // Show/hide all past events
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  // Separate upcoming and past events
+  const upcomingEvents = useMemo(() => {
+    const now = new Date();
+    return serverEvents.filter(e => {
+      if (!e.time) return true; // Keep events without time in upcoming
+      const eventDate = new Date(e.time);
+      return eventDate >= now;
+    });
+  }, [serverEvents]);
+
+  const pastEvents = useMemo(() => {
+    const now = new Date();
+    return serverEvents.filter(e => {
+      if (!e.time) return false; // Events without time stay in upcoming
+      const eventDate = new Date(e.time);
+      return eventDate < now;
+    });
+  }, [serverEvents]);
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Auto-refresh events when admin panel loads
   useEffect(() => {
     refreshServerEvents();
   }, []); // Run once on mount
 
-  const selected = useMemo(() => {
-    // Look in both local and server events for the selected event
-    const local = localEvents.find((e) => String(e.id) === String(editId));
-    const server = serverEvents.find((e) => String(e.id) === String(editId));
-    return local || server;
-  }, [localEvents, serverEvents, editId]);
-
   // Simulate pressing the refresh button
   const refreshServerEvents = async () => {
     try {
       const res = await apiJson(`/api/events`, { method: "GET" });
       setServerEvents(res?.events || []);
-    } catch (e) {
+    } catch {
       // Silently fail - user can manually refresh if needed
     }
   };
@@ -429,6 +571,7 @@ export default function AdminEventsPanel() {
         organizers: res?.organizers ?? [],
         speakers: res?.speakers ?? [],
         description: res?.description ?? "",
+        image_url: res?.image_url ?? "",
       },
       ...evs,
     ]);
@@ -568,7 +711,9 @@ export default function AdminEventsPanel() {
                   location: loadedEvent.location || "",
                   capacity: String(loadedEvent.capacity ?? ""),
                   organizers: toCSV(loadedEvent.organizers || []),
-                  speakers: toCSV(loadedEvent.speakers || [])
+                  speakers: toCSV(loadedEvent.speakers || []),
+                  category: loadedEvent.category || "",
+                  image_url: loadedEvent.image_url || "",
                 } : undefined}
                 onCreated={handleCreated}
                 onUpdated={handleUpdated}
@@ -630,15 +775,17 @@ export default function AdminEventsPanel() {
                 )}
               </div>
               <div className="server-list">
-                <h4 className="subhead">🌐 All Events</h4>
-                <p className="muted">All your events</p>
+                <h4 className="subhead">🌐 Upcoming Events</h4>
+                <p className="muted">Events scheduled for the future</p>
                 <div className="list">
                   {serverEvents.length === 0 ? (
                     <div className="muted">Click "🔄 Refresh Events" to load all your events</div>
+                  ) : upcomingEvents.length === 0 ? (
+                    <div className="muted">No upcoming events</div>
                   ) : (
                     <>
                       <ul className="list-items">
-                        {(showAllServerEvents ? serverEvents : serverEvents.slice(0, 5)).map((e) => (
+                        {(showAllServerEvents ? upcomingEvents : upcomingEvents.slice(0, isMobile ? 4 : 6)).map((e) => (
                           <li key={e.id} className="list-item">
                             <div className="list-item-main">
                               <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
@@ -650,14 +797,51 @@ export default function AdminEventsPanel() {
                           </li>
                         ))}
                       </ul>
-                      {serverEvents.length > 5 && (
+                      {upcomingEvents.length > (isMobile ? 4 : 6) && (
                         <div className="show-more-section">
                           <Button
                             variant="secondary"
                             onClick={() => setShowAllServerEvents(!showAllServerEvents)}
                             className="show-more-btn"
                           >
-                            {showAllServerEvents ? '📈 Show Less' : `📋 Show More (${serverEvents.length - 5} more)`}
+                            {showAllServerEvents ? '📈 Show Less' : `📋 Show More (${upcomingEvents.length - (isMobile ? 4 : 6)} more)`}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="server-list">
+                <h4 className="subhead">📜 Previous Events</h4>
+                <p className="muted">Events that have already occurred</p>
+                <div className="list">
+                  {pastEvents.length === 0 ? (
+                    <div className="muted">No past events</div>
+                  ) : (
+                    <>
+                      <ul className="list-items">
+                        {(showAllPastEvents ? pastEvents : pastEvents.slice(0, isMobile ? 4 : 6)).map((e) => (
+                          <li key={e.id} className="list-item" style={{ opacity: 0.7 }}>
+                            <div className="list-item-main">
+                              <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
+                              <div className="item-sub">📍 {e.location} • 📅 {fromApiTimeToLocal(e.time)}</div>
+                            </div>
+                            <div className="list-item-actions">
+                              <Button variant="secondary" onClick={() => editEventFromList(e.id)}>✏️ View</Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      {pastEvents.length > (isMobile ? 4 : 6) && (
+                        <div className="show-more-section">
+                          <Button
+                            variant="secondary"
+                            onClick={() => setShowAllPastEvents(!showAllPastEvents)}
+                            className="show-more-btn"
+                          >
+                            {showAllPastEvents ? '📈 Show Less' : `📋 Show More (${pastEvents.length - (isMobile ? 4 : 6)} more)`}
                           </Button>
                         </div>
                       )}

@@ -21,6 +21,7 @@ urlpatterns = [
     # Events API
     path('api/events', events_views.events_create, name='events_create'),
     path('api/events/<int:event_id>', events_views.events_detail, name='events_detail'),
+    path('api/events/upload-image', events_views.events_upload_image, name='events_upload_image'),
     path('api/events/register', events_views.events_register, name='events_register'),
     path('api/events/unregister', events_views.events_unregister, name='events_unregister'),
     path('api/my/events', events_views.my_events, name='my_events'),

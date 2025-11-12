@@ -30,18 +30,22 @@ from database.database import (
     get_description,
     get_date,
     get_location,
+    get_image_url,
     get_capacity,
     get_available_seats,
     get_speakers,
+    get_category,
     get_organizer,
     update_title,
     update_description,
     update_date,
     update_location,
+    update_image_url,
     update_capacity,
     update_available_seats,
     update_speakers,
     update_organizer,
+    update_category,
     delete_event,
 )
 from database.tables import Events
@@ -66,6 +70,8 @@ def _row_to_eventout(r: Any) -> EventOut:
         available_seats=getattr(r, "available_seats", None),
         organizers=getattr(r, "organizers", []) or [],
         speakers=getattr(r, "speakers", []) or [],
+        category=getattr(r, "category", None),
+        image_url=getattr(r, "image_url", None),
     )
 
 
@@ -84,7 +90,9 @@ def create_event(event_in: EventCreate, created_by: Optional[str] = None) -> Eve
         location=event_in.location,
         capacity=event_in.capacity,
         available_seats=event_in.capacity,  # initially full capacity
+        category=event_in.category if hasattr(event_in, 'category') else None,
         created_by=created_by,
+        image_url=getattr(event_in, "image_url", None),
     )
     # organizers & speakers (lists) handled if DB supports JSON/text arrays
     if event_in.organizers:
@@ -117,6 +125,8 @@ def get_event(event_id: int) -> Optional[EventOut]:
         available_seats=get_available_seats(event_id),
         organizers=get_organizer(event_id) or [],
         speakers=get_speakers(event_id) or [],
+        category=get_category(event_id),
+        image_url=get_image_url(event_id),
     )
 
 
@@ -146,10 +156,14 @@ def update_event(event_id: int, event_in: EventUpdate) -> Optional[EventOut]:
         update_date(event_id, event_in.date)
     if event_in.location is not None:
         update_location(event_id, event_in.location)
+    if getattr(event_in, "image_url", None) is not None:
+        update_image_url(event_id, event_in.image_url)
     if event_in.organizers is not None:
         update_organizer(event_id, event_in.organizers)
     if event_in.speakers is not None:
         update_speakers(event_id, event_in.speakers)
+    if getattr(event_in, "category", None) is not None:
+        update_category(event_id, event_in.category)
 
     # Handle capacity/available_seats coupling
     if event_in.capacity is not None:
@@ -238,6 +252,7 @@ def list_user_events(user_email: str, search: Optional[str] = None) -> List[Even
                 available_seats=r.get('available_seats'),
                 organizers=r.get('organizers') or [],
                 speakers=r.get('speakers') or [],
+                category=r.get('category'),
             ))
         else:
             out.append(_row_to_eventout(r))

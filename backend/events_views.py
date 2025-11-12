@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import os
 from datetime import datetime
 from typing import Any, Dict
+from uuid import uuid4
 
 from django.http import JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.utils import timezone
 
 import jwt
 
@@ -22,6 +26,8 @@ from backend.crud import (
     list_user_events,
 )
 from database.database import get_user
+from backend.supabase_client import get_supabase_client
+from storage3.types import CreateOrUpdateBucketOptions
 
 
 def _auth_from_request(request: HttpRequest):
@@ -80,6 +86,8 @@ def _eventout_to_json(evt) -> Dict[str, Any]:
         "available_seats": getattr(evt, "available_seats", None),
         "organizers": getattr(evt, "organizers", []) or [],
         "speakers": getattr(evt, "speakers", []) or [],
+        "category": getattr(evt, "category", None),
+        "image_url": getattr(evt, "image_url", None),
     }
 
 
@@ -114,6 +122,8 @@ def events_create(request: HttpRequest):
                     "available_seats": getattr(e, "available_seats", None),
                     "organizers": getattr(e, "organizers", []) or [],
                     "speakers": getattr(e, "speakers", []) or [],
+                    "category": getattr(e, "category", None),
+                    "image_url": getattr(e, "image_url", None),
                 }
                 for e in filtered_events
             ]
@@ -133,6 +143,8 @@ def events_create(request: HttpRequest):
                     "available_seats": getattr(e, "available_seats", None),
                     "organizers": getattr(e, "organizers", []) or [],
                     "speakers": getattr(e, "speakers", []) or [],
+                    "category": getattr(e, "category", None),
+                    "image_url": getattr(e, "image_url", None),
                 }
                 for e in list_all_events(q)
             ]
@@ -160,9 +172,13 @@ def events_create(request: HttpRequest):
             capacity=data.get("capacity"),
             organizers=data.get("organizers"),
             speakers=data.get("speakers"),
+            category=data.get("category"),
+            image_url=data.get("image_url"),
         )
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+    if not getattr(evt_in, "image_url", None):
+        return JsonResponse({"error": "Event image is required"}, status=400)
 
     evt = create_event(evt_in, created_by=admin_user.email)
     out = _eventout_to_json(get_event(evt.id))
@@ -208,8 +224,10 @@ def events_detail(request: HttpRequest, event_id: int):
                 data["date"] = datetime.fromisoformat(str(data["time"]))
             except Exception:
                 return JsonResponse({"error": "Invalid time format (expected ISO 8601)"}, status=400)
+        if "image_url" in data and not (isinstance(data["image_url"], str) and data["image_url"].strip()):
+            return JsonResponse({"error": "Event image is required"}, status=400)
         try:
-            evt_in = EventUpdate(**{k: v for k, v in data.items() if k in {"title","description","date","location","capacity","organizers","speakers"}})
+            evt_in = EventUpdate(**{k: v for k, v in data.items() if k in {"title","description","date","location","capacity","organizers","speakers","category","image_url"}})
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
         updated = update_event(event_id, evt_in)
@@ -241,6 +259,94 @@ def events_detail(request: HttpRequest, event_id: int):
         return JsonResponse({"message": "Event deleted"})
 
     return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+def events_upload_image(request: HttpRequest):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    admin_user = _require_admin(request)
+    if not admin_user:
+        return JsonResponse({"error": "Admin privileges required"}, status=403)
+
+    client = get_supabase_client()
+    if client is None:
+        return JsonResponse({"error": "Supabase storage is not configured."}, status=503)
+
+    uploaded = request.FILES.get("image")
+    if not uploaded:
+        return JsonResponse({"error": "Missing file field 'image'."}, status=400)
+
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+    _, ext = os.path.splitext(uploaded.name or "upload")
+    ext = ext.lower()
+    if ext not in allowed_ext:
+        guessed_ext = mimetypes.guess_extension(uploaded.content_type or "")
+        if guessed_ext in allowed_ext:
+            ext = guessed_ext
+        else:
+            return JsonResponse({"error": "Unsupported file type."}, status=400)
+
+    if uploaded.size and uploaded.size > 8 * 1024 * 1024:
+        return JsonResponse({"error": "Image exceeds 8 MB limit."}, status=400)
+
+    bucket = getattr(settings, "SUPABASE_BUCKET", "event-images")
+    storage_client = client.storage
+    try:
+        existing_buckets = {bucket_info.name for bucket_info in storage_client.list_buckets()}
+    except Exception as exc:
+        return JsonResponse({"error": f"Failed to list Supabase buckets: {exc}"}, status=500)
+
+    if bucket not in existing_buckets:
+        try:
+            options = CreateOrUpdateBucketOptions(public=getattr(settings, "SUPABASE_BUCKET_PUBLIC", True))
+            storage_client.create_bucket(bucket, options=options)
+        except Exception as exc:
+            return JsonResponse({"error": f"Failed to create Supabase bucket '{bucket}': {exc}"}, status=500)
+
+    storage = storage_client.from_(bucket)
+
+    timestamp = timezone.now()
+    object_path = f"events/{timestamp:%Y/%m/%d}/{uuid4().hex}{ext}"
+    content_type = uploaded.content_type or mimetypes.guess_type(uploaded.name or "")[0] or "application/octet-stream"
+
+    try:
+        upload_response = storage.upload(
+            object_path,
+            uploaded.read(),
+            {"contentType": content_type}
+        )
+    except Exception as exc:
+        return JsonResponse({"error": f"Supabase upload failed: {exc}"}, status=400)
+
+    error = getattr(upload_response, "error", None)
+    if error:
+        return JsonResponse({"error": str(error)}, status=500)
+
+    public_response = storage.get_public_url(object_path)
+    public_url = None
+    if isinstance(public_response, dict):
+        public_url = public_response.get("publicUrl") or public_response.get("public_url")
+        if not public_url and isinstance(public_response.get("data"), dict):
+            public_url = public_response["data"].get("publicUrl")
+    elif hasattr(public_response, "data"):
+        data_attr = public_response.data
+        if isinstance(data_attr, dict):
+            public_url = data_attr.get("publicUrl")
+        else:
+            public_url = data_attr
+
+    if not public_url:
+        # Fallback to manual construction (bucket must be public)
+        base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
+        public_url = f"{base_url}/storage/v1/object/public/{bucket}/{object_path}" if base_url else object_path
+
+    return JsonResponse({
+        "image_url": public_url,
+        "path": object_path,
+        "content_type": content_type,
+    }, status=201)
 
 
 @csrf_exempt
@@ -320,6 +426,8 @@ def my_events(request: HttpRequest):
             "available_seats": getattr(e, "available_seats", None),
             "organizers": getattr(e, "organizers", []) or [],
             "speakers": getattr(e, "speakers", []) or [],
+            "category": getattr(e, "category", None),
+            "image_url": getattr(e, "image_url", None),
         }
         for e in list_user_events(user.email, q)
     ]

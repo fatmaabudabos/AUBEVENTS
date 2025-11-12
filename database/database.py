@@ -142,7 +142,9 @@ def create_event(
     location: Optional[str] = None,
     capacity: Optional[int] = None,
     available_seats: Optional[int] = None,
-    created_by: Optional[str] = None
+    category: Optional[str] = None,
+    created_by: Optional[str] = None,
+    image_url: Optional[str] = None
 ) -> Events:
     
     event = Events(
@@ -152,7 +154,9 @@ def create_event(
         location=location,
         capacity=capacity,
         available_seats=available_seats,
-        created_by=created_by
+        category=category,
+        created_by=created_by,
+        image_url=image_url
     )
 
     with Session(get_engine()) as session:
@@ -188,6 +192,11 @@ def get_location(event_id: int) -> Optional[str]:
         event = session.get(Events, event_id)
         return event.location if event else None
 
+def get_image_url(event_id: int) -> Optional[str]:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        return event.image_url if event else None
+
 def get_capacity(event_id: int) -> Optional[int]:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
@@ -202,6 +211,11 @@ def get_speakers(event_id: int) -> Optional[str]:
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
         return event.speakers if event else None
+
+def get_category(event_id: int) -> Optional[str]:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        return event.category if event else None
 
 # --- Setters ---
 
@@ -250,6 +264,15 @@ def update_location(event_id: int, location: str):
         session.add(event)
         session.commit()
 
+def update_image_url(event_id: int, image_url: Optional[str]):
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        if not event:
+            return
+        event.image_url = image_url
+        session.add(event)
+        session.commit()
+
 def update_capacity(event_id: int, capacity: int):
     with Session(get_engine()) as session:
         event = session.get(Events, event_id)
@@ -276,6 +299,15 @@ def update_speakers(event_id: int, speakers: str) -> None:
         if not event:
             return
         event.speakers = speakers
+        session.add(event)
+        session.commit()
+
+def update_category(event_id: int, category: Optional[str]) -> None:
+    with Session(get_engine()) as session:
+        event = session.get(Events, event_id)
+        if not event:
+            return
+        event.category = category
         session.add(event)
         session.commit()
 
@@ -386,6 +418,8 @@ def get_user_events(user_email: str, search: Optional[str] = None) -> list[int]:
                     "available_seats": event.available_seats,
                     "organizers": getattr(event, "organizers", []) or [],
                     "speakers": getattr(event, "speakers", []) or [],
+                    "category": getattr(event, "category", None),
+                    "image_url": getattr(event, "image_url", None),
                 }
                 for event in user.events
             ]
@@ -404,6 +438,8 @@ def get_user_events(user_email: str, search: Optional[str] = None) -> list[int]:
                     "date": event.date,
                     "location": event.location,
                     "available_seats": event.available_seats,
+                    "category": getattr(event, "category", None),
+                    "image_url": getattr(event, "image_url", None),
                 })
         return out
 

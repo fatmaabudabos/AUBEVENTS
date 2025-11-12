@@ -1,7 +1,14 @@
-import { Calendar, MapPin, Users, Clock, CheckCircle, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { MapPin, Users, Clock, CheckCircle, Plus } from 'lucide-react';
 import './EventCard.css';
 
 function EventCard({ event, isRegistered, onRegister, onUnregister }) {
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [event.image_url]);
+
   const formatDate = (dateStr) => {
     if (!dateStr) return null;
     const date = new Date(dateStr);
@@ -17,15 +24,25 @@ function EventCard({ event, isRegistered, onRegister, onUnregister }) {
 
   return (
     <div className={`event-card ${isRegistered ? 'registered' : ''}`}>
+      {event.image_url && !imageError && (
+        <div className="event-image-wrapper">
+          <img
+            src={event.image_url}
+            alt={`${event.title || 'Event'} poster`}
+            className="event-image"
+            onError={() => setImageError(true)}
+          />
+        </div>
+      )}
       <div className="event-header">
         <h3>{event.title}</h3>
         {isRegistered && <CheckCircle className="registered-badge" size={20} />}
       </div>
-      
+
       {event.description && (
         <p className="event-description">{event.description}</p>
       )}
-      
+
       <div className="event-details">
         {event.time && (
           <div className="detail">
@@ -52,18 +69,18 @@ function EventCard({ event, isRegistered, onRegister, onUnregister }) {
           </div>
         )}
       </div>
-      
+
       <div className="event-actions">
         {isRegistered ? (
-          <button 
-            onClick={() => onUnregister(event.id)} 
+          <button
+            onClick={() => onUnregister(event.id)}
             className="btn btn-secondary"
           >
             Unregister
           </button>
         ) : (
-          <button 
-            onClick={() => onRegister(event.id)} 
+          <button
+            onClick={() => onRegister(event.id)}
             className="btn btn-primary"
           >
             <Plus size={16} />

@@ -208,10 +208,73 @@
   resize: vertical;
 }
 
+.admin-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border-gray);
+  border-radius: 12px;
+  font-size: 1rem;
+  background: var(--white);
+  color: var(--text-dark);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+
+.admin-select:focus {
+  outline: none;
+  border-color: var(--deep-red);
+  box-shadow: 0 0 0 3px rgba(139, 0, 0, 0.1);
+}
+
 .form-actions {
   display: flex;
   gap: 1rem;
   margin-top: 1rem;
+}
+
+.image-upload {
+  display: grid;
+  gap: 1rem;
+}
+
+.image-preview,
+.image-placeholder {
+  width: 160px;
+  height: 160px;
+  margin: 0 auto;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview {
+  border: 1px solid var(--border-gray);
+  background: #f1f3f5;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image-placeholder {
+  border: 1px dashed var(--border-gray);
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 /* Buttons */
