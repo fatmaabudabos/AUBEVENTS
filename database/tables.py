@@ -10,6 +10,7 @@ class UserEventLink(SQLModel, table=True):
     user_email: str = Field(foreign_key="users.email", primary_key=True)
 
 class Users(SQLModel, table=True):
+    fullname: str
     email: str = Field(primary_key=True)
     password_hash: str
 
