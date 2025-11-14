@@ -149,6 +149,9 @@ function useDirtyTracker(initial) {
   }, [initial]);
 
   const setField = (k, v) => setValues((s) => ({ ...s, [k]: v }));
+  const resetToInitial = () => {
+    setValues(initialRef.current);
+  };
   const dirtyPatch = useMemo(() => {
     const out = {};
     for (const k of Object.keys(values || {})) {
@@ -157,7 +160,7 @@ function useDirtyTracker(initial) {
     return out;
   }, [values]);
 
-  return { values, setField, dirtyPatch };
+  return { values, setField, resetToInitial, dirtyPatch };
 }
 
 // ----------------------
@@ -172,46 +175,93 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
     capacity: "",
     organizers: "",
     speakers: "",
+    category: "",
+    image_url: "",
   }), []);
   const stableInitial = initial ?? defaultInitial;
+  const initialImageUrl = stableInitial.image_url || "";
 
-  const { values, setField, dirtyPatch } = useDirtyTracker(stableInitial);
+  const { values, setField, resetToInitial, dirtyPatch } = useDirtyTracker(stableInitial);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showRetryModal, setShowRetryModal] = useState(false);
+  const [lastError, setLastError] = useState("");
+  const [imagePreview, setImagePreview] = useState(initialImageUrl);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
 
-
-  // If editing and no initial provided, fetch once by id
   useEffect(() => {
-    let ignore = false;
-    async function load() {
-      if (mode !== "edit" || !eventId || initial) return;
-      try {
-        const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
-        if (ignore) return;
-        setField("title", data.title || "");
-        setField("description", data.description || "");
-        setField("time", fromApiTimeToLocal(data.time || ""));
-        setField("location", data.location || "");
-        setField("capacity", String(data.capacity ?? ""));
-        setField("organizers", toCSV(data.organizers || []));
-        setField("speakers", toCSV(data.speakers || []));
-      } catch (e) {
-        toast.error(`Failed to load event ${eventId}: ${e.message}`);
-      }
+    setImagePreview(initialImageUrl);
+  }, [initialImageUrl]);
+
+  // Check if form has any content
+  const hasContent = useMemo(() => {
+    return Object.values(values).some(value => {
+      if (value === null || value === undefined) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      return String(value).trim() !== "";
+    });
+  }, [values]);
+
+
+  const triggerFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api(`/api/events/upload-image`, { method: "POST", body: formData, auth: true });
+      const url = res?.image_url || "";
+      setField("image_url", url);
+      setImagePreview(url);
+      toast.success("Image uploaded successfully");
+    } catch (err) {
+      toast.error(err.message || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-    load();
-    return () => {
-      ignore = true;
-    };
-  }, [mode, eventId, initial, setField, toast]);
+  };
+
+  // Automatic loading disabled - data is passed via initial prop when Load button is pressed
+  // This prevents unwanted API calls when editId changes in the input field
 
   const onSubmit = async (e) => {
     e.preventDefault();
     // Validate
     if (!values.title.trim()) return toast.error("Title is required");
     if (!values.time || !isIsoLike(values.time)) return toast.error("Time must be set (YYYY-MM-DDTHH:MM)");
+
+    // Validate year is 2025 or 2026
+    const year = parseInt(values.time.substring(0, 4));
+    if (year !== 2025 && year !== 2026) {
+      return toast.error("Event year must be 2025 or 2026");
+    }
+
+    // Validate event is not in the past
+    const eventDate = new Date(values.time);
+    const now = new Date();
+    if (eventDate < now) {
+      return toast.error("Cannot create an event in the past");
+    }
+
     const cap = parseCapacity(values.capacity);
     if (Number.isNaN(cap)) return toast.error("Capacity must be a non-negative integer");
 
+    setIsSubmitting(true);
+
     // Prepare payload
+    const normalizedImageUrl = (typeof values.image_url === "string" ? values.image_url : values.image_url ?? "").trim();
+    if (!normalizedImageUrl) {
+      setIsSubmitting(false);
+      toast.error("Event image is required");
+      return;
+    }
+
     const payload = {
       title: values.title.trim(),
       description: values.description.trim(),
@@ -220,21 +270,15 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
       capacity: cap === "" ? 0 : cap,
       organizers: toArray(values.organizers),
       speakers: toArray(values.speakers),
+      category: values.category?.trim() || null,
+      image_url: normalizedImageUrl,
     };
 
     try {
       if (mode === "create") {
         const res = await apiJson(`/api/events`, { method: "POST", body: JSON.stringify(payload) });
         toast.success(res?.message || "Event created successfully");
-        onCreated?.(res);
-        // Clear form fields after successful create
-        setField("title", "");
-        setField("description", "");
-        setField("time", "");
-        setField("location", "");
-        setField("capacity", "");
-        setField("organizers", "");
-        setField("speakers", "");
+        onCreated?.(res); // This will force form remount via formResetKey
       } else {
         // For PATCH, send only changed fields
         const patch = {};
@@ -251,17 +295,31 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
         }
         if (diff.organizers !== undefined) patch.organizers = toArray(diff.organizers);
         if (diff.speakers !== undefined) patch.speakers = toArray(diff.speakers);
+        if (diff.category !== undefined) patch.category = diff.category?.trim() || null;
+        if (diff.image_url !== undefined) {
+          const diffUrl = (typeof diff.image_url === "string" ? diff.image_url : diff.image_url ?? "").trim();
+          if (!diffUrl) {
+            setIsSubmitting(false);
+            toast.error("Event image is required");
+            return;
+          }
+          patch.image_url = diffUrl;
+        }
 
         if (!Object.keys(patch).length) {
+          setIsSubmitting(false);
           toast.info("No changes to save");
           return;
         }
         const res = await apiJson(`/api/events/${eventId}`, { method: "PATCH", body: JSON.stringify(patch) });
         toast.success(res?.message || "Event updated successfully");
-        onUpdated?.(res);
+        onUpdated?.(res); // This will force form remount via formResetKey
       }
     } catch (e) {
-      toast.error(e.message || "Request failed");
+      setLastError(e.message || "Request failed");
+      setShowRetryModal(true);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -279,6 +337,8 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
           <TextInput
             type="datetime-local"
             value={values.time}
+            min="2025-01-01T00:00"
+            max="2026-12-31T23:59"
             onChange={(e) => setField("time", e.target.value)}
           />
         </Labeled>
@@ -299,7 +359,53 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
             onChange={(e) => setField("capacity", e.target.value)}
           />
         </Labeled>
+        <Labeled label="Category">
+          <select
+            className="admin-select"
+            value={values.category}
+            onChange={(e) => setField("category", e.target.value)}
+          >
+            <option value="">-- Select Category (Optional) --</option>
+            <option value="Workshop">Workshop</option>
+            <option value="Concert">Concert</option>
+            <option value="Lecture">Lecture</option>
+            <option value="Sports">Sports</option>
+            <option value="Social">Social</option>
+            <option value="Career">Career</option>
+          </select>
+        </Labeled>
       </div>
+      <Labeled label="Event Image">
+        <div className="image-upload">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="image-file-input"
+            onChange={handleFileChange}
+            hidden
+          />
+          {imagePreview ? (
+            <div className="image-preview">
+              <img src={imagePreview} alt="Selected event" />
+            </div>
+          ) : (
+            <div className="image-placeholder">
+              Upload an image (JPG, PNG, GIF, WEBP) before saving.
+            </div>
+          )}
+          <div className="image-actions">
+            <Button type="button" variant="secondary" onClick={triggerFilePicker} disabled={uploadingImage}>
+              {uploadingImage ? "Uploading..." : imagePreview ? "Replace Image" : "Upload Image"}
+            </Button>
+            {values.image_url && (
+              <a href={values.image_url} className="btn btn-secondary" target="_blank" rel="noopener noreferrer">
+                View Image
+              </a>
+            )}
+          </div>
+        </div>
+      </Labeled>
       <Labeled label="Organizers (comma-separated)">
         <TextInput
           placeholder="e.g., CCECS, AUB Alumni Club"
@@ -323,15 +429,48 @@ function EventForm({ mode, eventId, initial, onCancel, onCreated, onUpdated, toa
       </Labeled>
 
       <div className="form-actions">
-        <Button type="submit" variant="primary">
-          {mode === "create" ? "🎉 Create Event" : "💾 Save Changes"}
+        <Button type="submit" variant="primary" disabled={isSubmitting}>
+          {isSubmitting
+            ? (mode === "create" ? "🔄 Creating..." : "🔄 Saving...")
+            : (mode === "create" ? "🎉 Create Event" : "💾 Save Changes")
+          }
         </Button>
         {onCancel && (
-          <Button type="button" variant="secondary" onClick={onCancel}>
+          <Button type="button" variant="secondary" onClick={() => {
+            if (mode === "create" && hasContent) {
+              // Clear all form fields in create mode
+              resetToInitial();
+            } else {
+              // Regular cancel behavior (for edit mode or when no content)
+              onCancel();
+            }
+          }} disabled={isSubmitting || !hasContent}>
             ❌ Cancel
           </Button>
         )}
       </div>
+
+      {/* Retry Modal */}
+      {showRetryModal && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h3 className="modal-title">❌ {mode === "create" ? "Create Failed" : "Save Failed"}</h3>
+            <p className="modal-desc">{lastError}</p>
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setShowRetryModal(false)}>
+                Keep Form
+              </Button>
+              <Button variant="primary" onClick={() => {
+                resetToInitial();
+                setShowRetryModal(false);
+                toast.info("Form cleared. Try again!");
+              }}>
+                Clear Form
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
@@ -367,12 +506,57 @@ export default function AdminEventsPanel() {
   const [serverEvents, setServerEvents] = useState([]);
 
   // UI state
-  const [activeTab, setActiveTab] = useState("admin"); // "admin" | "user"
   const [mode, setMode] = useState("create"); // "create" | "edit"
   const [editId, setEditId] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
+  const [formResetKey, setFormResetKey] = useState(0); // Force form remount
+  const [loadedEvent, setLoadedEvent] = useState(null); // Event data loaded via Load button
+  const [showAllServerEvents, setShowAllServerEvents] = useState(false); // Show/hide all server events
+  const [showAllPastEvents, setShowAllPastEvents] = useState(false); // Show/hide all past events
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  const selected = useMemo(() => localEvents.find((e) => String(e.id) === String(editId)), [localEvents, editId]);
+  // Separate upcoming and past events
+  const upcomingEvents = useMemo(() => {
+    const now = new Date();
+    return serverEvents.filter(e => {
+      if (!e.time) return true; // Keep events without time in upcoming
+      const eventDate = new Date(e.time);
+      return eventDate >= now;
+    });
+  }, [serverEvents]);
+
+  const pastEvents = useMemo(() => {
+    const now = new Date();
+    return serverEvents.filter(e => {
+      if (!e.time) return false; // Events without time stay in upcoming
+      const eventDate = new Date(e.time);
+      return eventDate < now;
+    });
+  }, [serverEvents]);
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Auto-refresh events when admin panel loads
+  useEffect(() => {
+    refreshServerEvents();
+  }, []); // Run once on mount
+
+  // Simulate pressing the refresh button
+  const refreshServerEvents = async () => {
+    try {
+      const res = await apiJson(`/api/events`, { method: "GET" });
+      setServerEvents(res?.events || []);
+    } catch {
+      // Silently fail - user can manually refresh if needed
+    }
+  };
 
   const handleCreated = (res) => {
     // If backend returns the new event id, keep it; else synthesize a local id.
@@ -387,14 +571,29 @@ export default function AdminEventsPanel() {
         organizers: res?.organizers ?? [],
         speakers: res?.speakers ?? [],
         description: res?.description ?? "",
+        image_url: res?.image_url ?? "",
       },
       ...evs,
     ]);
+    // Clear loaded event data and force immediate form remount to clear all fields
+    setLoadedEvent(null);
+    setFormResetKey(k => k + 1);
+    // Simulate refresh button press
+    refreshServerEvents();
   };
 
   const handleUpdated = async (res) => {
     const id = res?.id ?? editId;
-    // Re-fetch the canonical event for accuracy (uses GET /api/events/:id)
+    // After saving changes in edit mode, return to create mode with an empty form
+    setMode("create");
+    setEditId("");
+    setLoadedEvent(null); // Clear loaded event data
+    // Force immediate form remount to clear all fields instantly
+    setFormResetKey(k => k + 1);
+    // Simulate refresh button press
+    refreshServerEvents();
+
+    // Update local cache in background (non-blocking)
     try {
       const fresh = await apiJson(`/api/events/${id}`, { method: "GET" });
       setLocalEvents((evs) => {
@@ -418,6 +617,8 @@ export default function AdminEventsPanel() {
       setShowConfirm(false);
       setEditId("");
       setMode("create");
+      // Refresh server events after deletion
+      refreshServerEvents();
     } catch (e) {
       toast.error(e.message || "Delete failed");
     }
@@ -426,13 +627,40 @@ export default function AdminEventsPanel() {
   const loadForEdit = async () => {
     if (!editId) return toast.error("Enter an event ID to load");
     try {
-      await apiJson(`/api/events/${editId}`, { method: "GET" });
-      // Success only indicates it exists; form fetches actual fields itself.
+      const data = await apiJson(`/api/events/${editId}`, { method: "GET" });
+      // Store the loaded event data - this will be used by the form
+      setLoadedEvent(data);
       setMode("edit");
+      // Force form remount with new data
+      setFormResetKey(k => k + 1);
       toast.success(`Loaded event ${editId} for editing`);
     } catch (e) {
       toast.error(e.message || "Failed to load event");
     }
+  };
+
+  const editEventFromList = async (eventId, eventData = null) => {
+    setEditId(String(eventId));
+
+    if (eventData) {
+      // Use the provided event data directly (for local events)
+      setLoadedEvent(eventData);
+      setMode("edit");
+      setFormResetKey(k => k + 1);
+    } else {
+      // Fetch from server (for server events)
+      try {
+        const data = await apiJson(`/api/events/${eventId}`, { method: "GET" });
+        setLoadedEvent(data);
+        setMode("edit");
+        setFormResetKey(k => k + 1);
+      } catch (e) {
+        toast.error(e.message || "Failed to load event");
+      }
+    }
+
+    // Scroll to top of page to show the form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -446,10 +674,7 @@ export default function AdminEventsPanel() {
             <div className="admin-badge">Admin Panel</div>
           </div>
           <div className="header-actions">
-            <Button variant={activeTab === "admin" ? "primary" : "secondary"} onClick={() => setActiveTab("admin")}>
-              📋 Admin Area
-            </Button>
-            <Button variant={activeTab === "user" ? "primary" : "secondary"} onClick={() => setActiveTab("user")}>
+            <Button variant="secondary" onClick={() => window.location.assign('/dashboard')}>
               👤 Student View
             </Button>
           </div>
@@ -457,134 +682,176 @@ export default function AdminEventsPanel() {
       </div>
 
       <div className="admin-container">
-        {activeTab === "user" ? (
+        <div className="admin-grid">
+          {/* Main form */}
           <div className="admin-card">
-            <h2 className="section-title">🎓 Student Dashboard</h2>
-            <p className="section-sub">
-              Welcome to the student view! Here you can browse and register for exciting AUB events.
-            </p>
-            <div className="student-preview">
-              <div className="preview-card">
-                <h3>📅 Upcoming Events</h3>
-                <p>Discover amazing events happening on campus</p>
-              </div>
-              <div className="preview-card">
-                <h3>🎫 My Registrations</h3>
-                <p>Track your registered events and attendance</p>
-              </div>
-              <div className="preview-card">
-                <h3>🏆 Campus Life</h3>
-                <p>Connect with fellow students and join activities</p>
-              </div>
+            <div className="card-top">
+              <h2 className="section-title">
+                {mode === "create" ? "🎉 Create New Event" :
+                  `✏️ Edit Event #${loadedEvent?.id || 'Loading...'}`}
+              </h2>
+              {mode === "edit" && (
+                <div className="card-actions">
+                  <Button variant="secondary" onClick={() => { setMode("create"); setEditId(""); setLoadedEvent(null); }}>
+                    ➕ New Event
+                  </Button>
+                  <Button variant="danger" onClick={() => setShowConfirm(true)}>🗑️ Delete</Button>
+                </div>
+              )}
+            </div>
+            <div className="card-body">
+              <EventForm
+                key={`${mode}-${loadedEvent?.id || editId || 'new'}-${formResetKey}`}
+                mode={mode}
+                eventId={loadedEvent?.id || editId}
+                initial={mode === "edit" && loadedEvent ? {
+                  title: loadedEvent.title || "",
+                  description: loadedEvent.description || "",
+                  time: fromApiTimeToLocal(loadedEvent.time || ""),
+                  location: loadedEvent.location || "",
+                  capacity: String(loadedEvent.capacity ?? ""),
+                  organizers: toCSV(loadedEvent.organizers || []),
+                  speakers: toCSV(loadedEvent.speakers || []),
+                  category: loadedEvent.category || "",
+                  image_url: loadedEvent.image_url || "",
+                } : undefined}
+                onCreated={handleCreated}
+                onUpdated={handleUpdated}
+                onCancel={() => { setMode("create"); setEditId(""); setLoadedEvent(null); }}
+                toast={toast}
+              />
             </div>
           </div>
-        ) : (
-          <div className="admin-grid">
-            {/* Main form */}
-            <div className="admin-card">
-              <div className="card-top">
-                <h2 className="section-title">
-                  {mode === "create" ? "🎉 Create New Event" : `✏️ Edit Event #${editId}`}
-                </h2>
-                {mode === "edit" && (
-                  <div className="card-actions">
-                    <Button variant="secondary" onClick={() => { setMode("create"); setEditId(""); }}>
-                      ➕ New Event
-                    </Button>
-                    <Button variant="danger" onClick={() => setShowConfirm(true)}>🗑️ Delete</Button>
-                  </div>
-                )}
-              </div>
-              <div className="card-body">
-                <EventForm
-                  mode={mode}
-                  eventId={editId}
-                  onCreated={handleCreated}
-                  onUpdated={handleUpdated}
-                  onCancel={() => { setMode("create"); setEditId(""); }}
-                  toast={toast}
+
+          {/* Tools sidebar */}
+          <div className="admin-card">
+            <h3 className="section-title">🔧 Quick Tools</h3>
+            <div className="tools">
+              <div className="tools-row">
+                <TextInput
+                  placeholder="Enter Event ID"
+                  value={editId}
+                  onChange={(e) => setEditId(e.target.value)}
                 />
+                <Button variant="secondary" onClick={loadForEdit}>📂 Load</Button>
+              </div>
+              <p className="muted">
+                Enter an event ID to edit existing events
+                {/* <span className="code">GET /api/events/:id</span> */}
+              </p>
+              <div className="tools-actions">
+                <Button variant="secondary" onClick={async () => {
+                  try {
+                    const res = await apiJson(`/api/events`, { method: "GET" });
+                    setServerEvents(res?.events || []);
+                    toast.success(`📊 Loaded ${res?.events?.length ?? 0} events from server`);
+                  } catch (e) {
+                    toast.error(e.message || "Failed to load events");
+                  }
+                }}>🔄 Refresh Events</Button>
               </div>
             </div>
 
-            {/* Tools sidebar */}
-            <div className="admin-card">
-              <h3 className="section-title">🔧 Quick Tools</h3>
-              <div className="tools">
-                <div className="tools-row">
-                  <TextInput
-                    placeholder="Enter Event ID"
-                    value={editId}
-                    onChange={(e) => setEditId(e.target.value)}
-                  />
-                  <Button variant="secondary" onClick={loadForEdit}>📂 Load</Button>
-                </div>
-                <p className="muted">
-                  Enter an event ID to edit existing events
-                  <span className="code">GET /api/events/:id</span>
-                </p>
-                <div className="tools-actions">
-                  <Button variant="secondary" onClick={async () => {
-                    try {
-                      const res = await apiJson(`/api/events`, { method: "GET" });
-                      setServerEvents(res?.events || []);
-                      toast.success(`📊 Loaded ${res?.events?.length ?? 0} events from server`);
-                    } catch (e) {
-                      toast.error(e.message || "Failed to load events");
-                    }
-                  }}>🔄 Refresh Events</Button>
-                </div>
+            <div className="server-list">
+              <h4 className="subhead">📝 Recent Events</h4>
+              <p className="muted">Events created this session</p>
+              <div className="list">
+                {localEvents.length === 0 ? (
+                  <div className="muted">No events created yet. Start by creating your first event! 🎉</div>
+                ) : (
+                  <ul className="list-items">
+                    {localEvents.map((e) => (
+                      <li key={e.id} className="list-item">
+                        <div className="list-item-main">
+                          <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
+                          <div className="item-sub">📍 {e.location} • 📅 {fromApiTimeToLocal(e.time)}</div>
+                        </div>
+                        <div className="list-item-actions">
+                          <Button variant="secondary" onClick={() => editEventFromList(e.id, e)}>✏️ Edit</Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-
               <div className="server-list">
-                <h4 className="subhead">📝 Recent Events</h4>
-                <p className="muted">Events created/edited this session</p>
+                <h4 className="subhead">🌐 Upcoming Events</h4>
+                <p className="muted">Events scheduled for the future</p>
                 <div className="list">
-                  {localEvents.length === 0 ? (
-                    <div className="muted">No events created yet. Start by creating your first event! 🎉</div>
+                  {serverEvents.length === 0 ? (
+                    <div className="muted">Click "🔄 Refresh Events" to load all your events</div>
+                  ) : upcomingEvents.length === 0 ? (
+                    <div className="muted">No upcoming events</div>
                   ) : (
-                    <ul className="list-items">
-                      {localEvents.map((e) => (
-                        <li key={e.id} className="list-item">
-                          <div className="list-item-main">
-                            <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
-                            <div className="item-sub">📍 {e.location} • 📅 {fromApiTimeToLocal(e.time)}</div>
-                          </div>
-                          <div className="list-item-actions">
-                            <Button variant="secondary" onClick={() => { setEditId(String(e.id)); setMode("edit"); }}>✏️ Edit</Button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="server-list">
-                  <h4 className="subhead">🌐 All Events</h4>
-                  <p className="muted">Events from server database</p>
-                  <div className="list">
-                    {serverEvents.length === 0 ? (
-                      <div className="muted">Click "🔄 Refresh Events" to load from server</div>
-                    ) : (
+                    <>
                       <ul className="list-items">
-                        {serverEvents.map((e) => (
+                        {(showAllServerEvents ? upcomingEvents : upcomingEvents.slice(0, isMobile ? 4 : 6)).map((e) => (
                           <li key={e.id} className="list-item">
                             <div className="list-item-main">
                               <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
                               <div className="item-sub">📍 {e.location} • 📅 {fromApiTimeToLocal(e.time)}</div>
                             </div>
                             <div className="list-item-actions">
-                              <Button variant="secondary" onClick={() => { setEditId(String(e.id)); setMode("edit"); }}>✏️ Edit</Button>
+                              <Button variant="secondary" onClick={() => editEventFromList(e.id)}>✏️ Edit</Button>
                             </div>
                           </li>
                         ))}
                       </ul>
-                    )}
-                  </div>
+                      {upcomingEvents.length > (isMobile ? 4 : 6) && (
+                        <div className="show-more-section">
+                          <Button
+                            variant="secondary"
+                            onClick={() => setShowAllServerEvents(!showAllServerEvents)}
+                            className="show-more-btn"
+                          >
+                            {showAllServerEvents ? '📈 Show Less' : `📋 Show More (${upcomingEvents.length - (isMobile ? 4 : 6)} more)`}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="server-list">
+                <h4 className="subhead">📜 Previous Events</h4>
+                <p className="muted">Events that have already occurred</p>
+                <div className="list">
+                  {pastEvents.length === 0 ? (
+                    <div className="muted">No past events</div>
+                  ) : (
+                    <>
+                      <ul className="list-items">
+                        {(showAllPastEvents ? pastEvents : pastEvents.slice(0, isMobile ? 4 : 6)).map((e) => (
+                          <li key={e.id} className="list-item" style={{ opacity: 0.7 }}>
+                            <div className="list-item-main">
+                              <div className="item-title">#{String(e.id)} – {e.title || "Untitled Event"}</div>
+                              <div className="item-sub">📍 {e.location} • 📅 {fromApiTimeToLocal(e.time)}</div>
+                            </div>
+                            <div className="list-item-actions">
+                              <Button variant="secondary" onClick={() => editEventFromList(e.id)}>✏️ View</Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      {pastEvents.length > (isMobile ? 4 : 6) && (
+                        <div className="show-more-section">
+                          <Button
+                            variant="secondary"
+                            onClick={() => setShowAllPastEvents(!showAllPastEvents)}
+                            className="show-more-btn"
+                          >
+                            {showAllPastEvents ? '📈 Show Less' : `📋 Show More (${pastEvents.length - (isMobile ? 4 : 6)} more)`}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       <Toasts items={toast.toasts} />

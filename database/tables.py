@@ -38,4 +38,8 @@ class Events(SQLModel, table=True):
     speakers: List[str] = Field(default_factory=list, sa_column=Column(JSON))
     organizers: List[str] = Field(default_factory=list, sa_column=Column(JSON))
 
+    category: Optional[str] = Field(default=None)
+    created_by: Optional[str] = Field(foreign_key="users.email", default=None)
+    image_url: Optional[str] = Field(default=None)
+
     users: List[Users] = Relationship(back_populates="events", link_model=UserEventLink)

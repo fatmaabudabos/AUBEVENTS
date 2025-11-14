@@ -1,8 +1,10 @@
 from django.contrib import admin
-from django.urls import path, include
-from backend import events_views
+from django.urls import path, include, re_path
 from django.http import JsonResponse
-
+from django.views.generic import TemplateView
+from django.conf import settings
+from django.conf.urls.static import static
+from backend import events_views
 
 def root_index(_request):
     """Simple root endpoint to help discover APIs."""
@@ -13,13 +15,24 @@ def root_index(_request):
     })
 
 urlpatterns = [
-    path('', root_index, name='api_root'),
     path('admin/', admin.site.urls),
     path('auth/', include('accounts.urls')),
+
     # Events API
     path('api/events', events_views.events_create, name='events_create'),
     path('api/events/<int:event_id>', events_views.events_detail, name='events_detail'),
+    path('api/events/upload-image', events_views.events_upload_image, name='events_upload_image'),
     path('api/events/register', events_views.events_register, name='events_register'),
     path('api/events/unregister', events_views.events_unregister, name='events_unregister'),
     path('api/my/events', events_views.my_events, name='my_events'),
+
+    # Optional API root
+    path('api/', root_index, name='api_root'),
+]
+
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# Catch-all for React routing - must exclude all Django routes
+urlpatterns += [
+    re_path(r'^(?!api/|admin/|auth/|static/).*$', TemplateView.as_view(template_name='index.html')),
 ]

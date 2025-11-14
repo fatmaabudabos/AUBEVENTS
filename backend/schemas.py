@@ -43,6 +43,8 @@ class EventBase(BaseModel):
     capacity: Optional[int]
     organizers: Optional[List[str]]
     speakers: Optional[List[str]]
+    category: Optional[str] = None
+    image_url: Optional[str] = None
 
     # Validation rules
     @validator("capacity")
@@ -72,6 +74,12 @@ class EventBase(BaseModel):
             raise ValueError("Speakers cannot be empty")
         return v
 
+    @validator("image_url")
+    def image_url_not_blank(cls, v):
+        if v is not None and not str(v).strip():
+            raise ValueError("Image URL cannot be empty")
+        return v
+
 
 # -------------------------
 # Create schema
@@ -88,6 +96,7 @@ class EventCreate(EventBase):
     capacity: int
     organizers: List[str]
     speakers: List[str]
+    image_url: str
 
 
 # -------------------------
@@ -105,6 +114,14 @@ class EventUpdate(BaseModel):
     capacity: Optional[int] = None
     organizers: Optional[List[str]] = None
     speakers: Optional[List[str]] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
+
+    @validator("image_url")
+    def image_url_not_blank(cls, v):
+        if v is not None and not str(v).strip():
+            raise ValueError("Image URL cannot be empty")
+        return v
 
 
 # -------------------------
@@ -125,6 +142,8 @@ class EventOut(BaseModel):
     available_seats: Optional[int]
     organizers: List[str]
     speakers: List[str]
+    category: Optional[str] = None
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True  # allows reading from SQLModel/ORM objects
