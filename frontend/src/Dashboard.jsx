@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Calendar, MapPin, Users, Clock, Search, LogOut, CheckCircle, Plus, Filter } from 'lucide-react';
 import { api } from './api';
+import ConfirmModal from './components/ConfirmModal';
 import './Dashboard.css';
 
 const CATEGORY_OPTIONS = ['Workshop', 'Concert', 'Lecture', 'Sports', 'Social', 'Career'];
@@ -84,6 +85,39 @@ function Dashboard() {
   const [detailEvent, setDetailEvent] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [confirmModal, setConfirmModal] = useState(null);
+
+  const showConfirmModal = useCallback((config) => {
+    setConfirmModal({
+      title: config.title ?? 'Are you sure?',
+      description: config.description ?? '',
+      confirmLabel: config.confirmLabel ?? 'Confirm',
+      cancelLabel: config.cancelLabel ?? 'Cancel',
+      tone: config.tone ?? 'default',
+      onConfirm: config.onConfirm,
+      onCancel: config.onCancel,
+    });
+  }, []);
+
+  const closeConfirmModal = useCallback(() => {
+    setConfirmModal(null);
+  }, []);
+
+  const handleConfirmModalConfirm = useCallback(() => {
+    const action = confirmModal?.onConfirm;
+    closeConfirmModal();
+    if (typeof action === 'function') {
+      action();
+    }
+  }, [confirmModal, closeConfirmModal]);
+
+  const handleConfirmModalCancel = useCallback(() => {
+    const action = confirmModal?.onCancel;
+    closeConfirmModal();
+    if (typeof action === 'function') {
+      action();
+    }
+  }, [confirmModal, closeConfirmModal]);
 
   const refreshAllEvents = useCallback(async () => {
     try {
@@ -300,7 +334,12 @@ function Dashboard() {
     window.location.href = '/login';
   };
 
-  const register = async (event) => {
+  const handleRegister = async (event) => {
+    if (!event || !event.id) {
+      toast.error('Invalid event data. Please try again.');
+      return;
+    }
+
     const id = event.id;
     try {
       const res = await api('/api/events/register', { method: 'POST', body: { event_id: id }, auth: true });
@@ -309,22 +348,22 @@ function Dashboard() {
         next.add(id);
         return next;
       });
-      setEvents(prev => prev.map(e => {
+      setEvents((prev) => prev.map((e) => {
         if (e.id !== id) return e;
         const cur = typeof e.available_seats === 'number' ? e.available_seats : null;
         if (cur === null) return e;
         return { ...e, available_seats: Math.max(0, cur - 1) };
       }));
-      setAllEvents(prev => prev.map(e => {
+      setAllEvents((prev) => prev.map((e) => {
         if (e.id !== id) return e;
         const cur = typeof e.available_seats === 'number' ? e.available_seats : null;
         if (cur === null) return e;
         return { ...e, available_seats: Math.max(0, cur - 1) };
       }));
-      setRegisteredEvents(prev => {
-        const exists = prev.some(e => e.id === id);
+      setRegisteredEvents((prev) => {
+        const exists = prev.some((e) => e.id === id);
         if (exists) {
-          return prev.map(e => {
+          return prev.map((e) => {
             if (e.id !== id) return e;
             const cur = typeof e.available_seats === 'number' ? e.available_seats : null;
             if (cur === null) return e;
@@ -348,18 +387,27 @@ function Dashboard() {
         setEvents(latestAll);
       }
       toast.success(res?.message || `You registered for ${event.title || 'the event'}.`);
-      if (typeof window !== 'undefined' && window.confirm('Add this event to Google Calendar?')) {
-        startCalendarFlow(event);
+      if (typeof window !== 'undefined') {
+        showConfirmModal({
+          title: 'Add to Google Calendar?',
+          description: `Would you like to open Google Calendar to add "${event.title || 'this event'}" now?`,
+          confirmLabel: 'Open Calendar',
+          cancelLabel: 'Maybe later',
+          onConfirm: () => startCalendarFlow(event),
+        });
       }
     } catch (e) {
       toast.error(e.message || 'Registration failed');
     }
   };
 
-  const unregister = async (event) => {
+  const handleUnregister = async (event) => {
+    if (!event || !event.id) {
+      toast.error('Invalid event data. Please try again.');
+      return;
+    }
+
     const id = event.id;
-    const confirmed = window.confirm(`Unregister from "${event.title || 'this event'}"?`);
-    if (!confirmed) return;
     try {
       const res = await api('/api/events/unregister', { method: 'POST', body: { event_id: id }, auth: true });
       setMyEventIds((prev) => {
@@ -367,7 +415,7 @@ function Dashboard() {
         next.delete(id);
         return next;
       });
-      setEvents(prev => prev.map(e => {
+      setEvents((prev) => prev.map((e) => {
         if (e.id !== id) return e;
         const cur = typeof e.available_seats === 'number' ? e.available_seats : null;
         const cap = typeof e.capacity === 'number' ? e.capacity : null;
@@ -375,7 +423,7 @@ function Dashboard() {
         const next = Math.min(cap ?? cur + 1, cur + 1);
         return { ...e, available_seats: next };
       }));
-      setAllEvents(prev => prev.map(e => {
+      setAllEvents((prev) => prev.map((e) => {
         if (e.id !== id) return e;
         const cur = typeof e.available_seats === 'number' ? e.available_seats : null;
         const cap = typeof e.capacity === 'number' ? e.capacity : null;
@@ -383,9 +431,9 @@ function Dashboard() {
         const next = Math.min(cap ?? cur + 1, cur + 1);
         return { ...e, available_seats: next };
       }));
-      setRegisteredEvents(prev => prev.filter(e => e.id !== id));
+      setRegisteredEvents((prev) => prev.filter((e) => e.id !== id));
       if (activeTab === 'registered') {
-        setEvents(prev => prev.filter(e => e.id !== id));
+        setEvents((prev) => prev.filter((e) => e.id !== id));
       }
       const trimmedQuery = (query || '').trim();
       const [latestRegistered, latestAll] = await Promise.all([
@@ -402,6 +450,21 @@ function Dashboard() {
     } catch (e) {
       toast.error(e.message || 'Unregistration failed');
     }
+  };
+
+  const requestUnregister = (event) => {
+    if (!event) {
+      toast.error('Unable to determine which event to unregister. Please try again.');
+      return;
+    }
+    showConfirmModal({
+      title: 'Unregister from this event?',
+      description: `You will lose your spot for "${event.title || 'this event'}". Continue?`,
+      confirmLabel: 'Unregister',
+      cancelLabel: 'Keep me registered',
+      tone: 'danger',
+      onConfirm: () => handleUnregister(event),
+    });
   };
 
   const retryLastFetch = async () => {
@@ -734,7 +797,7 @@ function Dashboard() {
                           </button>
                           {myEventIds.has(evt.id) ? (
                             <button
-                              onClick={() => unregister(evt)}
+                              onClick={() => requestUnregister(evt)}
                               className="btn btn-secondary"
                             >
                               Unregister
@@ -744,7 +807,7 @@ function Dashboard() {
                               const isFull = typeof evt.available_seats === 'number' && evt.available_seats <= 0;
                               return (
                                 <button
-                                  onClick={() => register(evt)}
+                                  onClick={() => handleRegister(evt)}
                                   className={`btn ${isFull ? 'btn-disabled' : 'btn-primary'}`}
                                   disabled={isFull}
                                   title={isFull ? 'Event is full' : 'Register'}
@@ -776,6 +839,17 @@ function Dashboard() {
         </div>
       </div>
       <Toasts items={toast.toasts} dismiss={toast.dismiss} />
+      <ConfirmModal
+        isOpen={Boolean(confirmModal)}
+        title={confirmModal?.title}
+        description={confirmModal?.description}
+        confirmLabel={confirmModal?.confirmLabel}
+        cancelLabel={confirmModal?.cancelLabel}
+        tone={confirmModal?.tone}
+        onConfirm={handleConfirmModalConfirm}
+        onCancel={handleConfirmModalCancel}
+        onClose={handleConfirmModalCancel}
+      />
       {detailOpen && (
         <div className="dashboard-modal-overlay" role="dialog" aria-modal="true" onClick={closeDetails}>
           <div className="dashboard-modal" onClick={(e) => e.stopPropagation()}>
