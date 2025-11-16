@@ -1,9 +1,10 @@
 # List of database functions to be used in the backend
 
-from sqlmodel import Session, select, create_engine
+from sqlmodel import Session, select, create_engine, SQLModel
 from sqlalchemy import or_, update
 from database.tables import Users
 from database.tables import Events
+from database.tables import PendingSignup
 from typing import Optional, List
 from datetime import datetime
 from dotenv import load_dotenv
@@ -16,15 +17,124 @@ engine = create_engine(DATABASE_URL, echo=False)
 def get_engine():
     return engine
 
+
+def ensure_pending_signup_table():
+    SQLModel.metadata.create_all(engine, tables=[PendingSignup.__table__])
+
+#________________________________________________________________________________________________________________________________________________________
+
+# ------ Pending signup helpers ------
+
+def cleanup_expired_pending_signups(now: Optional[datetime] = None):
+    ensure_pending_signup_table()
+    cutoff = now or datetime.utcnow()
+    with Session(engine) as session:
+        expired = session.exec(
+            select(PendingSignup).where(PendingSignup.verification_token_expiry < cutoff)
+        ).all()
+        if not expired:
+            return 0
+        for row in expired:
+            session.delete(row)
+        session.commit()
+        return len(expired)
+
+
+def create_or_update_pending_signup(
+    email: str,
+    password_hash: str,
+    first_name: str,
+    last_name: str,
+    token: str,
+    expiry: datetime,
+):
+    ensure_pending_signup_table()
+    first = (first_name or "").strip()
+    last = (last_name or "").strip()
+    if not first or not last:
+        raise ValueError("first_name and last_name must be provided")
+    with Session(engine) as session:
+        pending = session.exec(select(PendingSignup).where(PendingSignup.email == email)).first()
+        if pending:
+            pending.password_hash = password_hash
+            pending.first_name = first
+            pending.last_name = last
+            pending.verification_token = token
+            pending.verification_token_expiry = expiry
+            pending.created_at = datetime.utcnow()
+        else:
+            pending = PendingSignup(
+                email=email,
+                password_hash=password_hash,
+                first_name=first,
+                last_name=last,
+                verification_token=token,
+                verification_token_expiry=expiry,
+            )
+        session.add(pending)
+        session.commit()
+        session.refresh(pending)
+        return pending
+
+
+def get_pending_signup(email: str) -> Optional[PendingSignup]:
+    ensure_pending_signup_table()
+    with Session(engine) as session:
+        return session.exec(select(PendingSignup).where(PendingSignup.email == email)).first()
+
+
+def delete_pending_signup(email: str) -> bool:
+    ensure_pending_signup_table()
+    with Session(engine) as session:
+        pending = session.exec(select(PendingSignup).where(PendingSignup.email == email)).first()
+        if not pending:
+            return False
+        session.delete(pending)
+        session.commit()
+        return True
+
+
+def promote_pending_signup(email: str) -> Optional[Users]:
+    ensure_pending_signup_table()
+    with Session(engine) as session:
+        pending = session.exec(select(PendingSignup).where(PendingSignup.email == email)).first()
+        if not pending:
+            return None
+        existing_user = session.get(Users, email)
+        if existing_user:
+            session.delete(pending)
+            session.commit()
+            session.refresh(existing_user)
+            return existing_user
+        user = Users(
+            email=email,
+            password_hash=pending.password_hash,
+            first_name=pending.first_name,
+            last_name=pending.last_name,
+        )
+        user.is_verified = True
+        user.verification_token = None
+        user.verification_token_expiry = None
+        session.add(user)
+        session.delete(pending)
+        session.commit()
+        session.refresh(user)
+        return user
+
+
 #________________________________________________________________________________________________________________________________________________________
 
 # ------ Users table functions ------
 
 # --- Create User ---
 
-def create_user(email: str, password_hash: str):
+def create_user(email: str, password_hash: str, first_name: str, last_name: str):
+    first = (first_name or "").strip()
+    last = (last_name or "").strip()
+    if not first or not last:
+        raise ValueError("first_name and last_name must be provided")
     with Session(engine) as session:
-        user = Users(email=email, password_hash=password_hash)
+        user = Users(email=email, password_hash=password_hash, first_name=first, last_name=last)
         session.add(user)
         session.commit()
 
@@ -35,10 +145,16 @@ def get_user(email: str) -> Optional[Users]:
     with Session(engine) as session:
         statement = select(Users).where(Users.email == email)
         return session.exec(statement).first()
-    
-def get_fullname(email: str) -> Optional[str]:
+
+
+def get_first_name(email: str) -> Optional[str]:
     user = get_user(email)
-    return user.fullname if user else None
+    return user.first_name if user else None
+
+
+def get_last_name(email: str) -> Optional[str]:
+    user = get_user(email)
+    return user.last_name if user else None
 
 def get_password(email: str) -> Optional[str]:
     user = get_user(email)
@@ -71,12 +187,23 @@ def get_reset_code_expiry(email: str) -> Optional[datetime]:
 
 # --- Setters ---
 
-def update_fullname(email: str, new_fullname: str):
+def update_first_name(email: str, new_first_name: str):
     with Session(engine) as session:
         user = session.exec(select(Users).where(Users.email == email)).first()
         if not user:
             return None
-        user.fullname = new_fullname
+        user.first_name = (new_first_name or "").strip()
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+
+def update_last_name(email: str, new_last_name: str):
+    with Session(engine) as session:
+        user = session.exec(select(Users).where(Users.email == email)).first()
+        if not user:
+            return None
+        user.last_name = (new_last_name or "").strip()
         session.add(user)
         session.commit()
         session.refresh(user)

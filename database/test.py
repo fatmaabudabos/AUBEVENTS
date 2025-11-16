@@ -1,7 +1,8 @@
 from database.database import (
-    create_user, get_fullname, get_user, get_password, get_is_verified, get_verification_token,
-    get_verification_token_expiry, get_reset_code, get_reset_code_expiry,update_fullname,
+    create_user, get_first_name, get_last_name, get_user, get_password, get_is_verified, get_verification_token,
+    get_verification_token_expiry, get_reset_code, get_reset_code_expiry,
     update_password, update_is_verified, update_verification_token,
+    update_first_name, update_last_name,
     update_reset_code, delete_user, update_is_admin
 )
 from database.database import (
@@ -18,7 +19,7 @@ from datetime import datetime, timedelta
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-#user = create_user("mkk40@mail.aub.edu", "randomPassword123")
+#user = create_user("mkk40@mail.aub.edu", "randomPassword123", "Jean", "Luc")
 
 #update_is_admin("mkk40@mail.aub.edu", True)
 #update_password("mkk40@mail.aub.edu", "newpassword")
@@ -26,7 +27,8 @@ from datetime import datetime, timedelta
 #update_verification_token("mkk40@mail.aub.edu", "newtoken", datetime.now() + timedelta(seconds=3600))
 #update_reset_code("mkk40@mail.aub.edu", "newcode", datetime.now() + timedelta(seconds=3600))
 
-#print("Full Name:", get_fullname("mkk40@mail.aub.edu"))
+#print("First Name:", get_first_name("mkk40@mail.aub.edu"))
+#print("Last Name:", get_last_name("mkk40@mail.aub.edu"))
 #print("Password:", get_password("mkk40@mail.aub.edu"))
 #print("Is Verified:", get_is_verified("mkk40@mail.aub.edu"))
 #print("Verification Token:", get_verification_token("mkk40@mail.aub.edu"))

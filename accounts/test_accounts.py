@@ -19,7 +19,7 @@ class PasswordResetTests(TestCase):
             pass
         # Clear rate limit cache for this email
         cache.delete(f"reset-rl-{self.email}")
-        create_user(self.email, pw_hash)
+        create_user(self.email, pw_hash, "Test", "User")
         update_is_verified(self.email, True)
 
     def test_password_reset_request_success(self):

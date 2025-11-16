@@ -6,16 +6,19 @@
   padding: 2rem 3.5rem 2rem 3.5rem;
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.10);
-  border-top: 10px solid #8B0000; /* Deep Red */
-  border-bottom: 10px solid #8B0000; /* Deep Red */
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.10);
+  border-top: 10px solid #8B0000;
+  /* Deep Red */
+  border-bottom: 10px solid #8B0000;
+  /* Deep Red */
 }
 
 /* Deep red background for login */
 .login-bg {
-  background: #8B0000; /* Deep Red */
+  background: #8B0000;
+  /* Deep Red */
   color: #fff;
-  box-shadow: 0 4px 32px rgba(139,0,0,0.10);
+  box-shadow: 0 4px 32px rgba(139, 0, 0, 0.10);
 }
 
 /* AUBEVENTS Title */
@@ -24,16 +27,18 @@
   margin-top: 2.5rem;
   margin-bottom: 1.5rem;
 }
+
 .aub-title {
   color: #001F3F;
   font-size: 2.8rem;
   font-weight: 900;
   letter-spacing: 0.12em;
   font-family: 'Segoe UI', 'Arial', sans-serif;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.auth-container h2, .login-title {
+.auth-container h2,
+.login-title {
   color: #fff;
   margin-bottom: 2rem;
   text-align: center;
@@ -46,6 +51,23 @@
   display: flex;
   flex-direction: column;
   gap: 1.3rem;
+}
+
+.auth-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: nowrap;
+}
+
+.auth-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .auth-row {
+    flex-direction: column;
+  }
 }
 
 .auth-container input {
@@ -69,6 +91,7 @@
   transition: background 0.2s;
   margin-top: 0.5rem;
 }
+
 .auth-container button:hover {
   background: linear-gradient(90deg, #001F3F 60%, #8B0000 100%);
 }
@@ -108,21 +131,21 @@
 }
 
 .flash.err {
-  background: #ffeceb; /* very light red */
-  color: #8b0000; /* deep red for strong contrast */
-  border: 1px solid rgba(139,0,0,0.12);
+  background: #ffeceb;
+  /* very light red */
+  color: #8b0000;
+  /* deep red for strong contrast */
+  border: 1px solid rgba(139, 0, 0, 0.12);
 }
 
 .flash.warn {
   background: #fff7e6;
   color: #8a5a00;
-  border: 1px solid rgba(138,90,0,0.12);
+  border: 1px solid rgba(138, 90, 0, 0.12);
 }
 
 .flash.info {
   background: #e9f5ff;
   color: #003d66;
-  border: 1px solid rgba(0,61,102,0.08);
+  border: 1px solid rgba(0, 61, 102, 0.08);
 }
-
-

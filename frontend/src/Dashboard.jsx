@@ -64,7 +64,7 @@ function Toasts({ items, dismiss }) {
 }
 
 function Dashboard() {
-  const [user, setUser] = useState({ name: 'User', email: '', isAdmin: false });
+  const [user, setUser] = useState({ name: 'User', email: '', isAdmin: false, firstName: '', lastName: '' });
   const [events, setEvents] = useState([]);
   const [allEvents, setAllEvents] = useState([]);
   const [registeredEvents, setRegisteredEvents] = useState([]);
@@ -166,7 +166,9 @@ function Dashboard() {
           if (!cancelled) setUser({
             name: me.name || me.email.split('@')[0],
             email: me.email,
-            isAdmin: me.is_admin || me.isAdmin || false
+            isAdmin: me.is_admin || me.isAdmin || false,
+            firstName: me.first_name || '',
+            lastName: me.last_name || '',
           });
         } catch {
           const cached = localStorage.getItem('user');
@@ -176,7 +178,9 @@ function Dashboard() {
             setUser({
               name: display,
               email: u.email || '',
-              isAdmin: u.is_admin || u.isAdmin || false
+              isAdmin: u.is_admin || u.isAdmin || false,
+              firstName: u.firstName || u.first_name || '',
+              lastName: u.lastName || u.last_name || '',
             });
           }
         }
@@ -331,7 +335,7 @@ function Dashboard() {
   const onLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const handleRegister = async (event) => {

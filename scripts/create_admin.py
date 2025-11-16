@@ -30,7 +30,7 @@ def main():
         update_is_admin(EMAIL, True)
     else:
         print(f"Creating user {EMAIL} and setting verified/admin flags.")
-        create_user(EMAIL, pw_hash)
+        create_user(EMAIL, pw_hash, "Admin", "User")
         update_is_verified(EMAIL, True)
         update_is_admin(EMAIL, True)
     print("Done.")

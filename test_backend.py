@@ -52,7 +52,9 @@ def main():
     # Test signup with sample data
     signup_data = {
         "email": "test@aub.edu.lb",
-        "password": "TestPass123!"
+        "password": "TestPass123!",
+        "first_name": "Test",
+        "last_name": "User",
     }
     test_endpoint("POST", "/auth/signup/", signup_data)
 

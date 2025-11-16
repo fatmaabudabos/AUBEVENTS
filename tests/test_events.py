@@ -15,7 +15,12 @@ def _signup_and_login(client):
     # Signup
     signup_resp = client.post(
         "/auth/signup/",
-        data=json.dumps({"name": "Events User", "email": email, "password": password}),
+        data=json.dumps({
+            "first_name": "Events",
+            "last_name": "User",
+            "email": email,
+            "password": password
+        }),
         content_type="application/json",
     )
     assert signup_resp.status_code in (200, 201)

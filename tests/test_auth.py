@@ -15,7 +15,8 @@ def test_signup_basic(client):
     email = f"test_user_{uuid.uuid4().hex[:8]}@mail.aub.edu"
 
     payload = {
-        "name": "Test User",
+        "first_name": "Test",
+        "last_name": "User",
         "email": email,
         "password": "StrongPass123!",
     }
@@ -39,7 +40,12 @@ def test_login_after_signup(client):
     # 1) Signup
     signup_resp = client.post(
         "/auth/signup/",
-        data=json.dumps({"name": "Login Test", "email": email, "password": password}),
+        data=json.dumps({
+            "first_name": "Login",
+            "last_name": "Test",
+            "email": email,
+            "password": password
+        }),
         content_type="application/json",
     )
     assert signup_resp.status_code in (200, 201)
@@ -65,7 +71,12 @@ def test_signup_verify_and_login(client):
     # 1) Signup
     signup_resp = client.post(
         "/auth/signup/",
-        data=json.dumps({"name": "Verify Test", "email": email, "password": password}),
+        data=json.dumps({
+            "first_name": "Verify",
+            "last_name": "Test",
+            "email": email,
+            "password": password
+        }),
         content_type="application/json",
     )
     assert signup_resp.status_code in (200, 201)
@@ -112,7 +123,8 @@ def test_login_wrong_password(client):
     signup_resp = client.post(
         "/auth/signup/",
         data=json.dumps({
-            "name": "Wrong Pass User",
+            "first_name": "Wrong",
+            "last_name": "Pass",
             "email": email,
             "password": correct_password,
         }),

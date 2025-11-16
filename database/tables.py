@@ -8,9 +8,20 @@ from sqlalchemy import Column, JSON
 class UserEventLink(SQLModel, table=True):
     event_id: int = Field(foreign_key="events.id", primary_key=True)
     user_email: str = Field(foreign_key="users.email", primary_key=True)
+    
+class PendingSignup(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(index=True, unique=True)
+    password_hash: str
+    first_name: str
+    last_name: str
+    verification_token: str
+    verification_token_expiry: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
 class Users(SQLModel, table=True):
-    fullname: str
+    first_name: str
+    last_name: str
     email: str = Field(primary_key=True)
     password_hash: str
 

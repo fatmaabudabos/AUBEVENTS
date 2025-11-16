@@ -19,6 +19,8 @@ def test_complete_flow():
     
     print(f"\n1. 📝 Testing user signup...")
     signup_response = requests.post(f"{BASE_URL}/auth/signup/", json={
+        "first_name": "Test",
+        "last_name": "User",
         "email": test_email,
         "password": test_password
     })

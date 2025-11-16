@@ -16,10 +16,25 @@ from rest_framework import status
 import json
 import requests
 from database.database import (
-    create_user, get_user, update_verification_token,
-    get_verification_token, get_verification_token_expiry,
-    update_is_verified,  get_password, get_is_verified,
-    update_reset_code, get_reset_code, get_reset_code_expiry
+    create_user,
+    get_user,
+    update_verification_token,
+    get_verification_token,
+    get_verification_token_expiry,
+    update_is_verified,
+    get_password,
+    get_is_verified,
+    update_reset_code,
+    get_reset_code,
+    get_reset_code_expiry,
+    create_or_update_pending_signup,
+    get_pending_signup,
+    delete_pending_signup,
+    promote_pending_signup,
+    cleanup_expired_pending_signups,
+    update_password,
+    update_first_name,
+    update_last_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,10 +127,15 @@ def me(request):
     user = _auth_from_request(request)
     if not user:
         return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+    first_name = getattr(user, "first_name", None)
+    last_name = getattr(user, "last_name", None)
+    fallback_name = user.email.split("@")[0] if user.email else None
+    display_name = first_name or getattr(user, "name", None) or fallback_name
     return Response({
         "email": user.email,
-        # Prefer stored name if present; otherwise derive from email prefix for UX
-        "name": getattr(user, "name", None) or (user.email.split("@")[0] if user.email else None),
+        "first_name": first_name,
+        "last_name": last_name,
+        "name": display_name,
         "is_verified": user.is_verified,
         "is_admin": getattr(user, "is_admin", False),
     }, status=status.HTTP_200_OK)
@@ -184,10 +204,24 @@ def check_password_strength(password: str) -> tuple[bool, str]:
 def signup(request):
     email = request.data.get("email")
     password = request.data.get("password")
+    first_name = request.data.get("first_name") or request.data.get("firstName")
+    last_name = request.data.get("last_name") or request.data.get("lastName")
+    fallback_name = request.data.get("name")
+
+    # Attempt to split fallback_name if explicit pieces were not provided
+    if fallback_name and (not first_name or not last_name):
+        pieces = [part for part in fallback_name.strip().split(" ") if part]
+        if pieces:
+            if not first_name:
+                first_name = pieces[0]
+            if not last_name:
+                last_name = " ".join(pieces[1:]) or pieces[0]
 
     # 1. Validate input
     if not email or not password:
         return Response({"error": "Email and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+    if not first_name or not last_name:
+        return Response({"error": "First name and last name are required."}, status=status.HTTP_400_BAD_REQUEST)
 
     # 2. Check domain
     if not is_aub_email(email):
@@ -198,22 +232,35 @@ def signup(request):
     if not ok:
         return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 4. Check duplicate
-    if get_user(email):  # DB lookup
+    cleanup_expired_pending_signups()
+
+    existing_user = get_user(email)
+    pending_signup = get_pending_signup(email)
+
+    if existing_user and getattr(existing_user, "is_verified", False):
         return Response({"error": "Email already registered."}, status=status.HTTP_409_CONFLICT)
 
     # 5. Hash password
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    first_clean = first_name.strip()
+    last_clean = last_name.strip()
 
-    # 6. Create user (inactive by default)
-    create_user(email, pw_hash)
-
-    # 7. Generate verification token
+    # 6. Generate verification token
     token = str(random.randint(100000, 999999))
     expiry = datetime.utcnow() + timedelta(hours=0.2)
-    update_verification_token(email, token, expiry)
 
-    # 8. Send verification email
+    if existing_user and not getattr(existing_user, "is_verified", False):
+        update_password(email, pw_hash)
+        update_first_name(email, first_clean)
+        update_last_name(email, last_clean)
+        update_verification_token(email, token, expiry)
+    else:
+        try:
+            create_or_update_pending_signup(email, pw_hash, first_clean, last_clean, token, expiry)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 7. Send verification email
     safe_send_mail(
         subject="Verify your AUBEvents account",
         message=f"Hello,\n\nYour verification code is: {token}\nThis code will expire in 10 minutes.\n\nBest,\nAUBEvents Team",
@@ -221,7 +268,7 @@ def signup(request):
         recipient_list=[email],
     )
 
-    # 9. Respond (we'll change this to email verification)
+    # 8. Respond (we'll change this to email verification)
     return Response(
         {"message": "Signup successful. Please verify your email.", "verification_token": token},
         status=status.HTTP_201_CREATED
@@ -237,29 +284,39 @@ def verify(request):
     if not email or not token:
         return Response({"error": "Email and token are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 2. Find user
+    cleanup_expired_pending_signups()
+
+    pending = get_pending_signup(email)
+    if pending:
+        if pending.verification_token != token:
+            return Response({"error": "Invalid verification code."}, status=status.HTTP_400_BAD_REQUEST)
+        if datetime.utcnow() > pending.verification_token_expiry:
+            delete_pending_signup(email)
+            return Response({"error": "Token has expired."}, status=status.HTTP_400_BAD_REQUEST)
+        promoted = promote_pending_signup(email)
+        if not promoted:
+            return Response({"error": "Unable to activate account."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        update_is_verified(email, True)
+        return Response({"message": "Account verified successfully."}, status=status.HTTP_200_OK)
+
+    # Fallback to legacy flow where user row already exists
     user = get_user(email)
     if not user:
         return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
-    # 3. Check if already verified
-    if get_is_verified(email):  # assuming Khalil’s Users model has `is_verified`
-       return Response({"message": "Account already verified."}, status=status.HTTP_200_OK)
+    if get_is_verified(email):
+        return Response({"message": "Account already verified."}, status=status.HTTP_200_OK)
 
-    # 4. Get stored token + expiry
     stored_token = get_verification_token(email)
     expiry = get_verification_token_expiry(email)
 
     if not stored_token or not expiry:
         return Response({"error": "No verification token found."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 5. Validate token
     if stored_token != token:
         return Response({"error": "Invalid verification code."}, status=status.HTTP_400_BAD_REQUEST)
-    # 6. Check expiry
     if datetime.utcnow() > expiry:
         return Response({"error": "Token has expired."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 7.mark as verified
     update_is_verified(email, True)
 
     return Response({"message": "Account verified successfully."}, status=status.HTTP_200_OK)
@@ -278,9 +335,17 @@ def login(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    cleanup_expired_pending_signups()
+    pending = get_pending_signup(email)
+
     # 2. Check user exists
     user = get_user(email)
     if not user:
+        if pending:
+            return Response(
+                {"error": "Please verify your account first."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         return Response(
             {"error": "Invalid email or password."},
             status=status.HTTP_401_UNAUTHORIZED

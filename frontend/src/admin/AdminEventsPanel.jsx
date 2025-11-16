@@ -585,7 +585,7 @@ export default function AdminEventsPanel() {
   const onLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   const handleSentryTest = () => {

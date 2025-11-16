@@ -16,7 +16,8 @@ def test_password_reset_request_smoke(client):
     signup_resp = client.post(
         "/auth/signup/",
         data=json.dumps({
-            "name": "Reset User",
+            "first_name": "Reset",
+            "last_name": "User",
             "email": email,
             "password": password,
         }),
