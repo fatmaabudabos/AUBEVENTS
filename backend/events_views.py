@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 import os
 from datetime import datetime
@@ -28,6 +29,18 @@ from backend.crud import (
 from database.database import get_user
 from backend.supabase_client import get_supabase_client
 from storage3.types import CreateOrUpdateBucketOptions
+
+try:  # Sentry SDK might not be installed in some environments
+    from sentry_sdk import capture_exception, capture_message  # type: ignore
+except Exception:  # pragma: no cover - fall back to no-ops when Sentry missing
+    def capture_exception(_exc=None):
+        return None
+
+    def capture_message(*_args, **_kwargs):
+        return None
+
+
+logger = logging.getLogger(__name__)
 
 
 def _auth_from_request(request: HttpRequest):
@@ -154,6 +167,7 @@ def events_create(request: HttpRequest):
     
     admin_user = _require_admin(request)
     if not admin_user:
+        logger.warning("events_create denied: admin auth missing")
         return JsonResponse({"error": "Admin privileges required"}, status=403)
 
     data = _parse_json(request)
@@ -182,6 +196,7 @@ def events_create(request: HttpRequest):
 
     evt = create_event(evt_in, created_by=admin_user.email)
     out = _eventout_to_json(get_event(evt.id))
+    logger.info("Event created", extra={"event_id": evt.id, "admin": admin_user.email})
     return JsonResponse({"message": "Event created", **(out or {})}, status=201)
 
 
@@ -234,6 +249,10 @@ def events_detail(request: HttpRequest, event_id: int):
         if not updated:
             return JsonResponse({"error": "Not found"}, status=404)
         out = _eventout_to_json(updated)
+        logger.info(
+            "Event updated",
+            extra={"event_id": event_id, "admin": admin_user.email},
+        )
         return JsonResponse({"message": "Event updated", **(out or {})})
 
     if method == "DELETE":
@@ -256,6 +275,10 @@ def events_detail(request: HttpRequest, event_id: int):
         ok = delete_event_by_id(event_id)
         if not ok:
             return JsonResponse({"error": "Not found"}, status=404)
+        logger.info(
+            "Event deleted",
+            extra={"event_id": event_id, "admin": admin_user.email},
+        )
         return JsonResponse({"message": "Event deleted"})
 
     return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -268,14 +291,18 @@ def events_upload_image(request: HttpRequest):
 
     admin_user = _require_admin(request)
     if not admin_user:
+        logger.warning("events_upload_image denied: admin auth missing")
         return JsonResponse({"error": "Admin privileges required"}, status=403)
 
     client = get_supabase_client()
     if client is None:
+        logger.error("Supabase storage client is not configured")
+        capture_message("Supabase storage client missing", level="error")
         return JsonResponse({"error": "Supabase storage is not configured."}, status=503)
 
     uploaded = request.FILES.get("image")
     if not uploaded:
+        logger.warning("Supabase upload request missing image field", extra={"admin": admin_user.email})
         return JsonResponse({"error": "Missing file field 'image'."}, status=400)
 
     allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -286,9 +313,17 @@ def events_upload_image(request: HttpRequest):
         if guessed_ext in allowed_ext:
             ext = guessed_ext
         else:
+            logger.warning(
+                "Unsupported file type",
+                extra={"admin": admin_user.email, "content_type": uploaded.content_type},
+            )
             return JsonResponse({"error": "Unsupported file type."}, status=400)
 
     if uploaded.size and uploaded.size > 8 * 1024 * 1024:
+        logger.warning(
+            "Upload rejected: image exceeds size limit",
+            extra={"admin": admin_user.email, "size": uploaded.size},
+        )
         return JsonResponse({"error": "Image exceeds 8 MB limit."}, status=400)
 
     bucket = getattr(settings, "SUPABASE_BUCKET", "event-images")
@@ -296,13 +331,18 @@ def events_upload_image(request: HttpRequest):
     try:
         existing_buckets = {bucket_info.name for bucket_info in storage_client.list_buckets()}
     except Exception as exc:
+        logger.exception("Failed to list Supabase buckets")
+        capture_exception(exc)
         return JsonResponse({"error": f"Failed to list Supabase buckets: {exc}"}, status=500)
 
     if bucket not in existing_buckets:
         try:
             options = CreateOrUpdateBucketOptions(public=getattr(settings, "SUPABASE_BUCKET_PUBLIC", True))
             storage_client.create_bucket(bucket, options=options)
+            logger.info("Created Supabase bucket", extra={"bucket": bucket})
         except Exception as exc:
+            logger.exception("Failed to create Supabase bucket", extra={"bucket": bucket})
+            capture_exception(exc)
             return JsonResponse({"error": f"Failed to create Supabase bucket '{bucket}': {exc}"}, status=500)
 
     storage = storage_client.from_(bucket)
@@ -318,10 +358,20 @@ def events_upload_image(request: HttpRequest):
             {"contentType": content_type}
         )
     except Exception as exc:
+        logger.exception(
+            "Supabase upload failed",
+            extra={"bucket": bucket, "admin": admin_user.email, "object_path": object_path},
+        )
+        capture_exception(exc)
         return JsonResponse({"error": f"Supabase upload failed: {exc}"}, status=400)
 
     error = getattr(upload_response, "error", None)
     if error:
+        logger.error(
+            "Supabase upload returned error",
+            extra={"bucket": bucket, "admin": admin_user.email, "object_path": object_path, "error": str(error)},
+        )
+        capture_message(f"Supabase upload error: {error}", level="error")
         return JsonResponse({"error": str(error)}, status=500)
 
     public_response = storage.get_public_url(object_path)
@@ -341,6 +391,16 @@ def events_upload_image(request: HttpRequest):
         # Fallback to manual construction (bucket must be public)
         base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
         public_url = f"{base_url}/storage/v1/object/public/{bucket}/{object_path}" if base_url else object_path
+
+    logger.info(
+        "Supabase image uploaded",
+        extra={
+            "bucket": bucket,
+            "admin": admin_user.email,
+            "object_path": object_path,
+            "content_type": content_type,
+        },
+    )
 
     return JsonResponse({
         "image_url": public_url,
@@ -371,6 +431,10 @@ def events_register(request: HttpRequest):
     res = register_user(action)
     # Map failure reasons to appropriate HTTP statuses (defense-in-depth)
     if res.success:
+        logger.info(
+            "User registered for event",
+            extra={"event_id": event_id, "email": user.email},
+        )
         return JsonResponse({"message": res.message, "success": True}, status=200)
     reason = getattr(res, "reason", None)
     if reason == 'full' or reason == 'already_registered':
@@ -379,6 +443,15 @@ def events_register(request: HttpRequest):
         status_code = 404
     else:
         status_code = 400
+    logger.warning(
+        "Event registration failed",
+        extra={"event_id": event_id, "email": user.email, "reason": reason},
+    )
+    if reason not in {"full", "already_registered", "not_found"}:
+        capture_message(
+            f"Registration failed for event {event_id}: {reason}",
+            level="warning",
+        )
     return JsonResponse({"message": res.message, "success": False, "reason": reason}, status=status_code)
 
 
@@ -403,7 +476,24 @@ def events_unregister(request: HttpRequest):
     action = UserEventAction(email=user.email, event_id=event_id)
     res = unregister_user(action)
     status_code = 200 if res.success else 400
-    return JsonResponse({"message": res.message, "success": res.success}, status=status_code)
+    if res.success:
+        logger.info(
+            "User unregistered from event",
+            extra={"event_id": event_id, "email": user.email},
+        )
+        return JsonResponse({"message": res.message, "success": True}, status=status_code)
+
+    reason = getattr(res, "reason", None)
+    logger.warning(
+        "Event unregister failed",
+        extra={"event_id": event_id, "email": user.email, "reason": reason},
+    )
+    if reason not in {"not_registered", "not_found"}:
+        capture_message(
+            f"Unregister failed for event {event_id}: {reason}",
+            level="warning",
+        )
+    return JsonResponse({"message": res.message, "success": False, "reason": reason}, status=status_code)
 
 
 @csrf_exempt

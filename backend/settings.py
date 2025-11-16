@@ -1,10 +1,13 @@
-
 from pathlib import Path
 import os
+import logging
 from dotenv import load_dotenv
 import dj_database_url
 import pymysql
 import tempfile
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration
 
 pymysql.install_as_MySQLdb()
 
@@ -208,3 +211,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
 
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration(), LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)],
+        traces_sample_rate=0.0,
+        send_default_pii=False,
+    )

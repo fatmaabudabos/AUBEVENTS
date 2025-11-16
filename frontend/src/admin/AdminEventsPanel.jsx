@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Sentry from "@sentry/react";
+import { LogOut } from "lucide-react";
 import { api } from "../api";
 import "./AdminPanel.css";
 
@@ -499,6 +501,7 @@ function Confirm({ open, title, description, onConfirm, onCancel }) {
 // ----------------------
 export default function AdminEventsPanel() {
   const toast = useToasts();
+  const [currentEmail, setCurrentEmail] = useState(null);
 
   // Local cache of events created/edited during this session (because no list endpoint was specified).
   // You can remove this if you later implement GET /api/events for listing.
@@ -543,6 +546,27 @@ export default function AdminEventsPanel() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setCurrentEmail(null);
+      return;
+    }
+    try {
+      const [, payload] = token.split(".");
+      if (!payload) {
+        setCurrentEmail(null);
+        return;
+      }
+      const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = JSON.parse(atob(base64));
+      setCurrentEmail((decoded?.email || "").toLowerCase());
+    } catch (err) {
+      console.warn("Failed to decode auth token", err);
+      setCurrentEmail(null);
+    }
+  }, []);
+
   // Auto-refresh events when admin panel loads
   useEffect(() => {
     refreshServerEvents();
@@ -556,6 +580,30 @@ export default function AdminEventsPanel() {
     } catch {
       // Silently fail - user can manually refresh if needed
     }
+  };
+
+  const onLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    window.location.href = "/login";
+  };
+
+  const handleSentryTest = () => {
+    const hub = Sentry.getCurrentHub();
+    if (!hub || !hub.getClient()) {
+      toast.info("Sentry is not configured for this session");
+      return;
+    }
+
+    Sentry.addBreadcrumb({
+      category: "demo",
+      message: "Admin triggered Sentry demo",
+      level: "info",
+    });
+
+    Sentry.captureMessage("Demo: Manual Sentry message from admin panel", "info");
+    Sentry.captureException(new Error("Demo: sample exception from admin panel"));
+    toast.success("Sent demo event to Sentry");
   };
 
   const handleCreated = (res) => {
@@ -677,6 +725,15 @@ export default function AdminEventsPanel() {
             <Button variant="secondary" onClick={() => window.location.assign('/dashboard')}>
               👤 Student View
             </Button>
+            {currentEmail === "maa399@aub.edu.lb" && (
+              <button type="button" className="sentry-test-btn" onClick={handleSentryTest}>
+                🧪 Test Sentry
+              </button>
+            )}
+            <button type="button" className="logout-btn" onClick={onLogout}>
+              <LogOut size={16} />
+              Log out
+            </button>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Auth.css";
 import { api } from "./api";
 
@@ -9,6 +10,7 @@ export default function ForgotPassword({ onSwitchLogin }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const navigate = useNavigate();
 
   // STEP 1: Send reset code
   const handleRequest = async (e) => {
@@ -41,6 +43,14 @@ export default function ForgotPassword({ onSwitchLogin }) {
       setStep(3);
     } catch (err) {
       setError(err.message || "Error resetting password.");
+    }
+  };
+
+  const handleBackToLogin = () => {
+    if (typeof onSwitchLogin === "function") {
+      onSwitchLogin();
+    } else {
+      navigate("/login");
     }
   };
 
@@ -97,7 +107,7 @@ export default function ForgotPassword({ onSwitchLogin }) {
       {step !== 3 && (
         <p>
           Remembered?{" "}
-          <button className="link" onClick={onSwitchLogin}>
+          <button className="link" onClick={handleBackToLogin}>
             Back to Login
           </button>
         </p>
