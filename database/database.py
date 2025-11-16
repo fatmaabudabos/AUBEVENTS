@@ -35,6 +35,10 @@ def get_user(email: str) -> Optional[Users]:
     with Session(engine) as session:
         statement = select(Users).where(Users.email == email)
         return session.exec(statement).first()
+    
+def get_fullname(email: str) -> Optional[str]:
+    user = get_user(email)
+    return user.fullname if user else None
 
 def get_password(email: str) -> Optional[str]:
     user = get_user(email)
@@ -66,6 +70,16 @@ def get_reset_code_expiry(email: str) -> Optional[datetime]:
 
 
 # --- Setters ---
+
+def update_fullname(email: str, new_fullname: str):
+    with Session(engine) as session:
+        user = session.exec(select(Users).where(Users.email == email)).first()
+        if not user:
+            return None
+        user.fullname = new_fullname
+        session.add(user)
+        session.commit()
+        session.refresh(user)
 
 def update_password(email: str, new_password_hash: str):
     with Session(engine) as session:

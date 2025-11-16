@@ -1,16 +1,16 @@
-from database import (
-    create_user, get_user, get_password, get_is_verified, get_verification_token,
-    get_verification_token_expiry, get_reset_code, get_reset_code_expiry,
+from database.database import (
+    create_user, get_fullname, get_user, get_password, get_is_verified, get_verification_token,
+    get_verification_token_expiry, get_reset_code, get_reset_code_expiry,update_fullname,
     update_password, update_is_verified, update_verification_token,
     update_reset_code, delete_user, update_is_admin
 )
-from database import (
+from database.database import (
     create_event, get_title, get_description, get_date, get_location,
-    get_capacity, get_available_seats, get_organizers, get_speakers, update_title, update_description, update_date, update_location,
-    update_capacity, update_available_seats, delete_event, update_organizers, update_speakers
+    get_capacity, get_available_seats, get_organizer, get_speakers, update_title, update_description, update_date, update_location,
+    update_capacity, update_available_seats, delete_event, update_organizer, update_speakers
 )
 
-from database import(
+from database.database import(
     register_user_to_event, unregister_user_from_event, get_user_events, get_event_users, print_all_events
 )
 
@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 #update_verification_token("mkk40@mail.aub.edu", "newtoken", datetime.now() + timedelta(seconds=3600))
 #update_reset_code("mkk40@mail.aub.edu", "newcode", datetime.now() + timedelta(seconds=3600))
 
+#print("Full Name:", get_fullname("mkk40@mail.aub.edu"))
 #print("Password:", get_password("mkk40@mail.aub.edu"))
 #print("Is Verified:", get_is_verified("mkk40@mail.aub.edu"))
 #print("Verification Token:", get_verification_token("mkk40@mail.aub.edu"))
@@ -49,13 +50,13 @@ from datetime import datetime, timedelta
 #update_organizers(1, ["Organizer 1", "Organizer 2"])
 #update_speakers(1, ["Speaker 1", "Speaker 2"])
 
-print("Title:", get_title(1))
-print("Description:", get_description(1))
-print("Date:", get_date(1))
-print("Location:", get_location(1))
-print("Capacity:", get_capacity(1))#print("Available Seats:", get_available_seats(1))
-print("Organizers:", get_organizers(1))
-print("Speakers:", get_speakers(1))
+#print("Title:", get_title(1))
+#print("Description:", get_description(1))
+#print("Date:", get_date(1))
+#print("Location:", get_location(1))
+#print("Capacity:", get_capacity(1))#print("Available Seats:", get_available_seats(1))
+#print("Organizers:", get_organizer(1))
+#print("Speakers:", get_speakers(1))
 
 #delete_event(1)
 
