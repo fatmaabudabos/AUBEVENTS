@@ -17,8 +17,8 @@ from database.database import (
     get_user, create_user, update_password, update_is_verified, update_is_admin
 )
 
-EMAIL = "faa86@aub.edu.lb"
-PASSWORD = "Fafe&6666"
+EMAIL = "maa@aub.edu.lb"
+PASSWORD = "CSgrad@27"
 
 def main():
     user = get_user(EMAIL)

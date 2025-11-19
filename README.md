@@ -37,6 +37,12 @@ AUBEVENTS/
 4. **Start the server:**
 	- `python manage.py runserver`
 
+## Load Testing
+- Ensure the seeded admin exists (from project root): `python scripts/create_admin.py`
+- Start the Django server locally: `python manage.py runserver`
+- In another shell run Locust: `locust -f load_tests/locustfile.py --host http://localhost:8000`
+- Override the default credentials with `LOCUST_EMAIL` and `LOCUST_PASSWORD` if needed; set `LOCUST_EVENT_ID` to exercise registration flows.
+
 ## API Endpoints (accounts)
 - `POST /auth/signup/` — Register a new user
 - `POST /auth/verify/` — Verify email
